@@ -420,8 +420,8 @@ definitions:
 host: localhost:8080
 info:
   contact: {}
-  description: API для мобильного приложения
-  title: Mobile Backend API
+  description: API проекта jerky-vault
+  title: Jerky-vault Backend API
   version: "1.0"
 paths:
   /api/auth/login:

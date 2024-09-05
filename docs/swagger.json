@@ -1,8 +1,8 @@
 {
     "swagger": "2.0",
     "info": {
-        "description": "API для мобильного приложения",
-        "title": "Mobile Backend API",
+        "description": "API проекта jerky-vault",
+        "title": "Jerky-vault Backend API",
         "contact": {},
         "version": "1.0"
     },
