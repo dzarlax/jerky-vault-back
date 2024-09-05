@@ -1,0 +1,216 @@
+package controllers
+
+import (
+    "github.com/gin-gonic/gin"
+    "mobile-backend-go/models"
+    "mobile-backend-go/database"
+    "net/http"
+    "log"
+    "strconv"
+)
+
+// GetOrder возвращает заказ по ID
+// @Summary Get an order by ID
+// @Description Fetch an order by its ID
+// @Tags Orders
+// @Security BearerAuth
+// @Produce  json
+// @Param id path int true "Order ID"
+// @Success 200 {object} models.Order
+// @Failure 400 {object} map[string]string "Invalid order ID"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 404 {object} map[string]string "Order not found"
+// @Failure 500 {object} map[string]string "Internal Server Error"
+// @Router /api/orders/{id} [get]
+func GetOrder(c *gin.Context) {
+    userID := c.MustGet("userID").(uint)
+    orderID, err := strconv.Atoi(c.Param("id"))
+    if err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid order ID"})
+        return
+    }
+
+    var order models.Order
+    if err := database.DB.Where("id = ? AND user_id = ?", orderID, userID).Preload("Items").First(&order).Error; err != nil {
+        c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
+        return
+    }
+
+    c.JSON(http.StatusOK, order)
+}
+
+// GetOrders возвращает список всех заказов
+// @Summary Get list of orders
+// @Description Get all orders for the authenticated user
+// @Tags Orders
+// @Security BearerAuth
+// @Produce  json
+// @Success 200 {array} models.Order
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal Server Error"
+// @Router /api/orders [get]
+func GetOrders(c *gin.Context) {
+    userID := c.MustGet("userID").(uint)
+
+    var orders []models.Order
+    if err := database.DB.Where("user_id = ?", userID).Preload("Items").Find(&orders).Error; err != nil {
+        log.Printf("Failed to fetch orders for userID %v: %v", userID, err)
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch orders"})
+        return
+    }
+
+    c.JSON(http.StatusOK, orders)
+}
+
+// AddOrder добавляет новый заказ
+// @Summary Add a new order
+// @Description Create a new order for the authenticated user
+// @Tags Orders
+// @Security BearerAuth
+// @Accept  json
+// @Produce  json
+// @Param order body models.Order true "Order data"
+// @Success 201 {object} models.Order
+// @Failure 400 {object} map[string]string "Bad request"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal Server Error"
+// @Router /api/orders [post]
+func AddOrder(c *gin.Context) {
+    userID := c.MustGet("userID").(uint)
+
+    var newOrder models.Order
+    if err := c.ShouldBindJSON(&newOrder); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+        return
+    }
+
+    newOrder.UserID = userID
+    if err := database.DB.Create(&newOrder).Error; err != nil {
+        log.Printf("Failed to add order: %v", err)
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add order"})
+        return
+    }
+
+    c.JSON(http.StatusCreated, newOrder)
+}
+
+// UpdateOrder обновляет заказ
+// @Summary Update an order
+// @Description Update an order's details
+// @Tags Orders
+// @Security BearerAuth
+// @Accept  json
+// @Produce  json
+// @Param id path int true "Order ID"
+// @Param order body models.Order true "Order data"
+// @Success 200 {object} map[string]string "Order updated successfully"
+// @Failure 400 {object} map[string]string "Invalid order ID"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 404 {object} map[string]string "Order not found"
+// @Failure 500 {object} map[string]string "Internal Server Error"
+// @Router /api/orders/{id} [put]
+func UpdateOrder(c *gin.Context) {
+    userID := c.MustGet("userID").(uint)
+    orderID, err := strconv.Atoi(c.Param("id"))
+    if err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid order ID"})
+        return
+    }
+
+    var order models.Order
+    if err := database.DB.Where("id = ? AND user_id = ?", orderID, userID).Preload("Items").First(&order).Error; err != nil {
+        c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
+        return
+    }
+
+    if err := c.ShouldBindJSON(&order); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+        return
+    }
+
+    if err := database.DB.Save(&order).Error; err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update order"})
+        return
+    }
+
+    c.JSON(http.StatusOK, gin.H{"message": "Order updated successfully"})
+}
+
+// UpdateOrderStatus обновляет статус заказа
+// @Summary Update order status
+// @Description Update the status of an order
+// @Tags Orders
+// @Security BearerAuth
+// @Accept  json
+// @Produce  json
+// @Param id path int true "Order ID"
+// @Param status body map[string]string true "Order status"
+// @Success 200 {object} map[string]string "Order status updated successfully"
+// @Failure 400 {object} map[string]string "Invalid order ID or missing status"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 404 {object} map[string]string "Order not found"
+// @Failure 500 {object} map[string]string "Internal Server Error"
+// @Router /api/orders/{id}/status [put]
+func UpdateOrderStatus(c *gin.Context) {
+    userID := c.MustGet("userID").(uint)
+    orderID, err := strconv.Atoi(c.Param("id"))
+    if err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid order ID"})
+        return
+    }
+
+    var requestBody struct {
+        Status string `json:"status"`
+    }
+
+    if err := c.ShouldBindJSON(&requestBody); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+        return
+    }
+
+    if requestBody.Status == "" {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Missing required field: status"})
+        return
+    }
+
+    if err := database.DB.Model(&models.Order{}).Where("id = ? AND user_id = ?", orderID, userID).Update("status", requestBody.Status).Error; err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update order status"})
+        return
+    }
+
+    c.JSON(http.StatusOK, gin.H{"message": "Order status updated successfully"})
+}
+
+// DeleteOrder удаляет заказ
+// @Summary Delete an order
+// @Description Delete an order by its ID
+// @Tags Orders
+// @Security BearerAuth
+// @Param id path int true "Order ID"
+// @Success 200 {object} map[string]string "Order deleted successfully"
+// @Failure 400 {object} map[string]string "Invalid order ID"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 404 {object} map[string]string "Order not found"
+// @Failure 500 {object} map[string]string "Internal Server Error"
+// @Router /api/orders/{id} [delete]
+func DeleteOrder(c *gin.Context) {
+    userID := c.MustGet("userID").(uint)
+    orderID, err := strconv.Atoi(c.Param("id"))
+    if err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid order ID"})
+        return
+    }
+
+    var order models.Order
+    if err := database.DB.Where("id = ? AND user_id = ?", orderID, userID).First(&order).Error; err != nil {
+        c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
+        return
+    }
+
+    if err := database.DB.Delete(&order).Error; err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete order"})
+        return
+    }
+
+    c.JSON(http.StatusOK, gin.H{"message": "Order deleted successfully"})
+}
