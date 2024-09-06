@@ -5,10 +5,10 @@ import (
 	"mobile-backend-go/database"
 	_ "mobile-backend-go/docs" // Импорт для Swagger документации
 	"mobile-backend-go/routes"
+	"os"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	"github.com/joho/godotenv"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
@@ -24,9 +24,11 @@ import (
 // @name Authorization
 func main() {
 	// Загрузка переменных окружения из .env файла
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Ошибка загрузки файла .env")
+	requiredEnvVars := []string{"DB_HOST", "DB_USER", "DB_PASSWORD", "DB_NAME", "DB_PORT", "FRONT_URL"}
+	for _, envVar := range requiredEnvVars {
+		if os.Getenv(envVar) == "" {
+			log.Fatalf("Переменная окружения %s не установлена", envVar)
+		}
 	}
 
 	// Подключение к базе данных и выполнение миграций
@@ -37,7 +39,7 @@ func main() {
 
 	// Настройка CORS
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:3000"}, // Домен фронтенда Next.js
+		AllowOrigins:     []string{os.Getenv("FRONT_URL")}, // Домен фронтенда Next.js
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		AllowCredentials: true,
