@@ -1,12 +1,13 @@
 package controllers
 
 import (
-    "github.com/gin-gonic/gin"
-    "mobile-backend-go/models"
-    "mobile-backend-go/database"
-    "net/http"
-    "log"
-    "strconv"
+	"log"
+	"mobile-backend-go/database"
+	"mobile-backend-go/models"
+	"net/http"
+	"strconv"
+
+	"github.com/gin-gonic/gin"
 )
 
 // GetOrder возвращает заказ по ID
@@ -23,20 +24,20 @@ import (
 // @Failure 500 {object} map[string]string "Internal Server Error"
 // @Router /api/orders/{id} [get]
 func GetOrder(c *gin.Context) {
-    userID := c.MustGet("userID").(uint)
-    orderID, err := strconv.Atoi(c.Param("id"))
-    if err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid order ID"})
-        return
-    }
+	userID := c.MustGet("userID").(uint)
+	orderID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid order ID"})
+		return
+	}
 
-    var order models.Order
-    if err := database.DB.Where("id = ? AND user_id = ?", orderID, userID).Preload("Items").First(&order).Error; err != nil {
-        c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
-        return
-    }
+	var order models.Order
+	if err := database.DB.Where("id = ? AND user_id = ?", orderID, userID).Preload("Items").First(&order).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
+		return
+	}
 
-    c.JSON(http.StatusOK, order)
+	c.JSON(http.StatusOK, order)
 }
 
 // GetOrders возвращает список всех заказов
@@ -50,16 +51,16 @@ func GetOrder(c *gin.Context) {
 // @Failure 500 {object} map[string]string "Internal Server Error"
 // @Router /api/orders [get]
 func GetOrders(c *gin.Context) {
-    userID := c.MustGet("userID").(uint)
+	userID := c.MustGet("userID").(uint)
 
-    var orders []models.Order
-    if err := database.DB.Where("user_id = ?", userID).Preload("Items").Find(&orders).Error; err != nil {
-        log.Printf("Failed to fetch orders for userID %v: %v", userID, err)
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch orders"})
-        return
-    }
+	var orders []models.Order
+	if err := database.DB.Where("user_id = ?", userID).Preload("Items").Find(&orders).Error; err != nil {
+		log.Printf("Failed to fetch orders for userID %v: %v", userID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch orders"})
+		return
+	}
 
-    c.JSON(http.StatusOK, orders)
+	c.JSON(http.StatusOK, orders)
 }
 
 // AddOrder добавляет новый заказ
@@ -76,22 +77,22 @@ func GetOrders(c *gin.Context) {
 // @Failure 500 {object} map[string]string "Internal Server Error"
 // @Router /api/orders [post]
 func AddOrder(c *gin.Context) {
-    userID := c.MustGet("userID").(uint)
+	userID := c.MustGet("userID").(uint)
 
-    var newOrder models.Order
-    if err := c.ShouldBindJSON(&newOrder); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-        return
-    }
+	var newOrder models.Order
+	if err := c.ShouldBindJSON(&newOrder); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
-    newOrder.UserID = userID
-    if err := database.DB.Create(&newOrder).Error; err != nil {
-        log.Printf("Failed to add order: %v", err)
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add order"})
-        return
-    }
+	newOrder.UserID = userID
+	if err := database.DB.Create(&newOrder).Error; err != nil {
+		log.Printf("Failed to add order: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add order"})
+		return
+	}
 
-    c.JSON(http.StatusCreated, newOrder)
+	c.JSON(http.StatusCreated, newOrder)
 }
 
 // UpdateOrder обновляет заказ
@@ -110,30 +111,86 @@ func AddOrder(c *gin.Context) {
 // @Failure 500 {object} map[string]string "Internal Server Error"
 // @Router /api/orders/{id} [put]
 func UpdateOrder(c *gin.Context) {
-    userID := c.MustGet("userID").(uint)
-    orderID, err := strconv.Atoi(c.Param("id"))
-    if err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid order ID"})
-        return
-    }
+	userID := c.MustGet("userID").(uint)
+	orderID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid order ID"})
+		return
+	}
 
-    var order models.Order
-    if err := database.DB.Where("id = ? AND user_id = ?", orderID, userID).Preload("Items").First(&order).Error; err != nil {
-        c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
-        return
-    }
+	var existingOrder models.Order
+	if err := database.DB.Where("id = ? AND user_id = ?", orderID, userID).Preload("Items").First(&existingOrder).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
+		return
+	}
 
-    if err := c.ShouldBindJSON(&order); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-        return
-    }
+	var requestData struct {
+		ClientID uint   `json:"client_id"`
+		Status   string `json:"status"`
+		Items    []struct {
+			ProductID uint    `json:"product_id"`
+			Quantity  int     `json:"quantity"`
+			Price     float64 `json:"price"`
+			CostPrice float64 `json:"cost_price"`
+		} `json:"items"`
+	}
 
-    if err := database.DB.Save(&order).Error; err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update order"})
-        return
-    }
+	// Считываем данные из запроса
+	if err := c.ShouldBindJSON(&requestData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
-    c.JSON(http.StatusOK, gin.H{"message": "Order updated successfully"})
+	// Обновляем поля заказа
+	existingOrder.ClientID = requestData.ClientID
+	existingOrder.Status = requestData.Status
+
+	// Начинаем транзакцию
+	tx := database.DB.Begin()
+
+	// Сохраняем обновленный заказ
+	if err := tx.Save(&existingOrder).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update order"})
+		return
+	}
+
+	// Удаляем старые элементы заказа
+	if err := tx.Where("order_id = ?", existingOrder.ID).Delete(&models.OrderItem{}).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete old order items"})
+		return
+	}
+
+	// Добавляем новые элементы заказа
+	var newOrderItems []models.OrderItem
+	for _, item := range requestData.Items {
+		newOrderItems = append(newOrderItems, models.OrderItem{
+			OrderID:    existingOrder.ID,
+			ProductID:  item.ProductID,
+			Quantity:   item.Quantity,
+			Price:      item.Price,
+			Cost_price: item.CostPrice,
+		})
+	}
+
+	// Сохраняем новые элементы заказа
+	if len(newOrderItems) > 0 {
+		if err := tx.Create(&newOrderItems).Error; err != nil {
+			tx.Rollback()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create new order items"})
+			return
+		}
+	}
+
+	// Подтверждаем транзакцию
+	if err := tx.Commit().Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to commit transaction"})
+		return
+	}
+
+	// Возвращаем успешный ответ
+	c.JSON(http.StatusOK, gin.H{"message": "Order updated successfully"})
 }
 
 // UpdateOrderStatus обновляет статус заказа
@@ -152,33 +209,33 @@ func UpdateOrder(c *gin.Context) {
 // @Failure 500 {object} map[string]string "Internal Server Error"
 // @Router /api/orders/{id}/status [put]
 func UpdateOrderStatus(c *gin.Context) {
-    userID := c.MustGet("userID").(uint)
-    orderID, err := strconv.Atoi(c.Param("id"))
-    if err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid order ID"})
-        return
-    }
+	userID := c.MustGet("userID").(uint)
+	orderID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid order ID"})
+		return
+	}
 
-    var requestBody struct {
-        Status string `json:"status"`
-    }
+	var requestBody struct {
+		Status string `json:"status"`
+	}
 
-    if err := c.ShouldBindJSON(&requestBody); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
-        return
-    }
+	if err := c.ShouldBindJSON(&requestBody); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+		return
+	}
 
-    if requestBody.Status == "" {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Missing required field: status"})
-        return
-    }
+	if requestBody.Status == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing required field: status"})
+		return
+	}
 
-    if err := database.DB.Model(&models.Order{}).Where("id = ? AND user_id = ?", orderID, userID).Update("status", requestBody.Status).Error; err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update order status"})
-        return
-    }
+	if err := database.DB.Model(&models.Order{}).Where("id = ? AND user_id = ?", orderID, userID).Update("status", requestBody.Status).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update order status"})
+		return
+	}
 
-    c.JSON(http.StatusOK, gin.H{"message": "Order status updated successfully"})
+	c.JSON(http.StatusOK, gin.H{"message": "Order status updated successfully"})
 }
 
 // DeleteOrder удаляет заказ
@@ -194,23 +251,23 @@ func UpdateOrderStatus(c *gin.Context) {
 // @Failure 500 {object} map[string]string "Internal Server Error"
 // @Router /api/orders/{id} [delete]
 func DeleteOrder(c *gin.Context) {
-    userID := c.MustGet("userID").(uint)
-    orderID, err := strconv.Atoi(c.Param("id"))
-    if err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid order ID"})
-        return
-    }
+	userID := c.MustGet("userID").(uint)
+	orderID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid order ID"})
+		return
+	}
 
-    var order models.Order
-    if err := database.DB.Where("id = ? AND user_id = ?", orderID, userID).First(&order).Error; err != nil {
-        c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
-        return
-    }
+	var order models.Order
+	if err := database.DB.Where("id = ? AND user_id = ?", orderID, userID).First(&order).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
+		return
+	}
 
-    if err := database.DB.Delete(&order).Error; err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete order"})
-        return
-    }
+	if err := database.DB.Delete(&order).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete order"})
+		return
+	}
 
-    c.JSON(http.StatusOK, gin.H{"message": "Order deleted successfully"})
+	c.JSON(http.StatusOK, gin.H{"message": "Order deleted successfully"})
 }
