@@ -41,7 +41,8 @@ func loadEnvVar(key string) string {
 // @name Authorization
 func main() {
 	// Определяем необходимые переменные окружения
-	requiredEnvVars := []string{"DB_HOST", "DB_USER", "DB_PASSWORD", "DB_NAME", "DB_PORT", "FRONT_URL"}
+	//requiredEnvVars := []string{"DB_HOST", "DB_USER", "DB_PASSWORD", "DB_NAME", "DB_PORT", "FRONT_URL"}
+	requiredEnvVars := []string{"DATABASE_URL", "FRONT_URL"}
 
 	// Проверяем наличие всех необходимых переменных окружения
 	for _, envVar := range requiredEnvVars {
