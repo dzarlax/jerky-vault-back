@@ -29,6 +29,7 @@ func SetupRoutes(router *gin.Engine) {
 		// Маршруты для ингредиентов
 		protectedRoutes.POST("/ingredients", controllers.CreateIngredient)
 		protectedRoutes.GET("/ingredients", controllers.GetIngredients)
+		protectedRoutes.GET("/ingredients/check", controllers.CheckIngredientExists)
 
 		// Маршруты для ингредиентов рецептов
 		protectedRoutes.POST("/recipes/:id/ingredients", controllers.AddIngredientToRecipe)
