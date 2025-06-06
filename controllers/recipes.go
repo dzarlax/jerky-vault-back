@@ -83,6 +83,7 @@ func GetRecipes(c *gin.Context) {
 				recipe.RecipeIngredients[j].Ingredient.Prices = []models.Price{latestPrice} // Присваиваем последнюю цену вручную
 				cost, err := utils.CalculateIngredientCost(latestPrice.Price, latestPrice.Quantity, latestPrice.Unit, ri.Quantity, ri.Unit)
 				if err == nil {
+					recipes[i].RecipeIngredients[j].CalculatedCost = cost // Присваиваем рассчитанную стоимость
 					totalCost += cost
 				}
 			}
@@ -133,6 +134,7 @@ func GetRecipe(c *gin.Context) {
 			recipe.RecipeIngredients[j].Ingredient.Prices = []models.Price{latestPrice} // Присваиваем последнюю цену вручную
 			cost, err := utils.CalculateIngredientCost(latestPrice.Price, latestPrice.Quantity, latestPrice.Unit, ri.Quantity, ri.Unit)
 			if err == nil {
+				recipe.RecipeIngredients[j].CalculatedCost = cost // Присваиваем рассчитанную стоимость
 				totalCost += cost
 			}
 		}
