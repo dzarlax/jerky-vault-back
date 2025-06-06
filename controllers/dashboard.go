@@ -77,6 +77,7 @@ func GetDashboardData(c *gin.Context) {
 
 	go func() {
 		defer wg.Done()
+		// Ингредиенты остаются общими (без фильтрации по user_id)
 		if err := database.DB.Model(&models.Ingredient{}).Count(&dashboard.TotalIngredients).Error; err != nil {
 			errors <- err
 		}
@@ -84,21 +85,30 @@ func GetDashboardData(c *gin.Context) {
 
 	go func() {
 		defer wg.Done()
-		if err := database.DB.Model(&models.Product{}).Count(&dashboard.TotalProducts).Error; err != nil {
+		// Товары должны фильтроваться по пользователю
+		if err := database.DB.Model(&models.Product{}).Where("user_id = ?", userIDUint).Count(&dashboard.TotalProducts).Error; err != nil {
 			errors <- err
 		}
 	}()
 
 	go func() {
 		defer wg.Done()
-		if err := database.DB.Model(&models.Order{}).Count(&dashboard.TotalOrders).Error; err != nil {
+		// Заказы должны фильтроваться по пользователю
+		if err := database.DB.Model(&models.Order{}).Where("user_id = ?", userIDUint).Count(&dashboard.TotalOrders).Error; err != nil {
 			errors <- err
 		}
 	}()
 
 	go func() {
 		defer wg.Done()
-		if err := database.DB.Table("ingredients").Select("type, COUNT(*) as count").Group("type").Scan(&dashboard.TypeDistribution).Error; err != nil {
+		// Распределение типов ингредиентов - только те, что используются в рецептах пользователя
+		if err := database.DB.Table("ingredients").
+			Select("ingredients.type, COUNT(DISTINCT ingredients.id) as count").
+			Joins("JOIN recipe_ingredients ON ingredients.id = recipe_ingredients.ingredient_id").
+			Joins("JOIN recipes ON recipe_ingredients.recipe_id = recipes.id").
+			Where("recipes.user_id = ? AND recipe_ingredients.deleted_at is NULL", userIDUint).
+			Group("ingredients.type").
+			Scan(&dashboard.TypeDistribution).Error; err != nil {
 			errors <- err
 		}
 	}()
@@ -119,11 +129,11 @@ func GetDashboardData(c *gin.Context) {
 		return
 	}
 
-	// Получаем незавершенные заказы
+	// Получаем незавершенные заказы пользователя
 	if err := database.DB.Table("orders").
 		Select("orders.id, orders.status, orders.created_at, clients.name AS client_name, clients.surname AS client_surname").
 		Joins("JOIN clients ON orders.client_id = clients.id").
-		Where("orders.status != ? and orders.deleted_at is NULL", "Finished").
+		Where("orders.status != ? AND orders.user_id = ? AND orders.deleted_at is NULL", "Finished", userIDUint).
 		Scan(&dashboard.PendingOrders).Error; err != nil {
 		handleError(c, "Failed to fetch pending orders", err)
 		return
