@@ -37,9 +37,10 @@ func SetupRoutes(router *gin.Engine) {
 
 		// Маршруты для продуктов
 		protectedRoutes.GET("/products", controllers.GetProducts)
+		protectedRoutes.GET("/products/:id", controllers.GetProductByID)
 		protectedRoutes.POST("/products", controllers.CreateProduct)
 		protectedRoutes.PUT("/products/:id", controllers.UpdateProduct)
-		protectedRoutes.DELETE("/products/:id", controllers.UpdateProduct)
+		protectedRoutes.DELETE("/products/:id", controllers.DeleteProduct)
 
 		// Маршруты для цен
 		protectedRoutes.POST("/prices", controllers.AddPrice)

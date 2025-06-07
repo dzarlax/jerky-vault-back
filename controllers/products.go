@@ -28,9 +28,10 @@ func GetProducts(c *gin.Context) {
 		return
 	}
 
-	// Применяем фильтр по userID и предзагружаем опции
+	// Применяем фильтр по userID и предзагружаем опции и упаковку
 	if err := database.DB.
 		Preload("Options").
+		Preload("Package").
 		Where("user_id = ?", userID).
 		Find(&products).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch products"})
@@ -38,6 +39,48 @@ func GetProducts(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, products)
+}
+
+// GetProductByID возвращает продукт по ID
+// @Summary Get product by ID
+// @Description Get a specific product by its ID
+// @Tags Products
+// @Security BearerAuth
+// @Produce  json
+// @Param id path int true "Product ID"
+// @Success 200 {object} models.Product
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Router /api/products/{id} [get]
+func GetProductByID(c *gin.Context) {
+	// Получаем ID продукта из параметров URL
+	productID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid product ID"})
+		return
+	}
+
+	// Получаем userID из контекста
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	var product models.Product
+
+	// Ищем продукт с предзагрузкой опций и упаковки
+	if err := database.DB.
+		Preload("Options").
+		Preload("Package").
+		Where("id = ? AND user_id = ?", productID, userID).
+		First(&product).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Product not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, product)
 }
 
 // CreateProduct создает новый продукт
@@ -76,10 +119,10 @@ func CreateProduct(c *gin.Context) {
 		return
 	}
 
-	// Проверка существования упаковки
+	// Проверка существования упаковки и принадлежности пользователю
 	var existingPackage models.Package
-	if err := database.DB.First(&existingPackage, requestData.PackageID).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid Package ID"})
+	if err := database.DB.Where("id = ? AND user_id = ?", requestData.PackageID, userID).First(&existingPackage).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid Package ID or package does not belong to user"})
 		return
 	}
 
@@ -131,8 +174,18 @@ func CreateProduct(c *gin.Context) {
 	// Подтверждаем транзакцию
 	tx.Commit()
 
-	// Возвращаем созданный продукт
-	c.JSON(http.StatusCreated, product)
+	// Загружаем полную информацию о продукте с упаковкой и опциями
+	var createdProduct models.Product
+	if err := database.DB.
+		Preload("Options").
+		Preload("Package").
+		First(&createdProduct, product.ID).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load created product"})
+		return
+	}
+
+	// Возвращаем созданный продукт с полной информацией
+	c.JSON(http.StatusCreated, createdProduct)
 }
 
 // UpdateProduct обновляет существующий продукт
@@ -189,6 +242,13 @@ func UpdateProduct(c *gin.Context) {
 		return
 	}
 
+	// Проверка существования упаковки и принадлежности пользователю
+	var existingPackage models.Package
+	if err := database.DB.Where("id = ? AND user_id = ?", requestData.PackageID, userID).First(&existingPackage).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid Package ID or package does not belong to user"})
+		return
+	}
+
 	// Обновляем поля продукта
 	existingProduct.Name = requestData.Name
 	existingProduct.Description = requestData.Description
@@ -240,8 +300,18 @@ func UpdateProduct(c *gin.Context) {
 	// Подтверждаем транзакцию для опций
 	tx.Commit()
 
-	// Возвращаем обновленный продукт
-	c.JSON(http.StatusOK, existingProduct)
+	// Загружаем полную информацию об обновленном продукте с упаковкой и опциями
+	var updatedProduct models.Product
+	if err := database.DB.
+		Preload("Options").
+		Preload("Package").
+		First(&updatedProduct, existingProduct.ID).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load updated product"})
+		return
+	}
+
+	// Возвращаем обновленный продукт с полной информацией
+	c.JSON(http.StatusOK, updatedProduct)
 }
 
 // DeleteProduct удаляет существующий продукт по его ID
