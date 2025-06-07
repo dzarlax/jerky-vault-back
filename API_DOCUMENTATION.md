@@ -586,27 +586,37 @@ API использует JWT (JSON Web Token) для аутентификаци�
     "id": 1,
     "client_id": 1,
     "status": "pending",
-    "total_amount": 1500.00,
-    "order_date": "2024-01-01T00:00:00Z",
-    "delivery_date": "2024-01-05T00:00:00Z",
     "user_id": 1,
     "client": {
       "id": 1,
-      "name": "Иван Иванов"
+      "name": "Иван Иванов",
+      "email": "ivan@example.com",
+      "phone": "+7-999-123-45-67",
+      "address": "Москва, ул. Примерная, 1"
     },
-    "order_items": [
+    "items": [
       {
         "id": 1,
+        "order_id": 1,
         "product_id": 1,
         "quantity": 5,
         "price": 300.00,
+        "cost_price": 180.00,
         "product": {
           "id": 1,
-          "name": "Beef Jerky Original"
+          "name": "Beef Jerky Original",
+          "description": "Classic beef jerky",
+          "price": 300.00,
+          "cost": 180.00,
+          "package": {
+            "id": 1,
+            "name": "Стандартная упаковка"
+          }
         }
       }
     ],
-    "created_at": "2024-01-01T00:00:00Z"
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:00Z"
   }
 ]
 ```
@@ -631,20 +641,82 @@ API использует JWT (JSON Web Token) для аутентификаци�
 {
   "client_id": 1,
   "status": "pending",
-  "total_amount": 1500.00,
-  "order_date": "2024-01-01T00:00:00Z",
-  "delivery_date": "2024-01-05T00:00:00Z",
-  "order_items": [
+  "items": [
     {
       "product_id": 1,
       "quantity": 5,
-      "price": 300.00
+      "price": 300.00,
+      "cost_price": 180.00
+    },
+    {
+      "product_id": 2,
+      "quantity": 3,
+      "price": 250.00,
+      "cost_price": 150.00
     }
   ]
 }
 ```
 
-**Response (201):** Созданный объект заказа
+**Response (201):**
+```json
+{
+  "id": 1,
+  "client_id": 1,
+  "status": "pending",
+  "user_id": 1,
+  "client": {
+    "id": 1,
+    "name": "Иван Иванов",
+    "email": "ivan@example.com",
+    "phone": "+7-999-123-45-67",
+    "address": "Москва, ул. Примерная, 1"
+  },
+  "items": [
+    {
+      "id": 1,
+      "order_id": 1,
+      "product_id": 1,
+      "quantity": 5,
+      "price": 300.00,
+      "cost_price": 180.00,
+      "product": {
+        "id": 1,
+        "name": "Beef Jerky Original",
+        "description": "Classic beef jerky",
+        "price": 300.00,
+        "cost": 180.00,
+        "package": {
+          "id": 1,
+          "name": "Стандартная упаковка"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "order_id": 1,
+      "product_id": 2,
+      "quantity": 3,
+      "price": 250.00,
+      "cost_price": 150.00,
+      "product": {
+        "id": 2,
+        "name": "Beef Jerky Spicy",
+        "description": "Spicy beef jerky",
+        "price": 250.00,
+        "cost": 150.00
+      }
+    }
+  ],
+  "created_at": "2024-01-01T00:00:00Z",
+  "updated_at": "2024-01-01T00:00:00Z"
+}
+```
+
+**Errors:**
+- `400` - Неверные данные запроса
+- `400` - Клиент не найден или не принадлежит пользователю
+- `400` - Продукт не найден или не принадлежит пользователю
 
 ---
 

@@ -32,7 +32,13 @@ func GetOrder(c *gin.Context) {
 	}
 
 	var order models.Order
-	if err := database.DB.Where("id = ? AND user_id = ?", orderID, userID).Preload("Items").First(&order).Error; err != nil {
+	if err := database.DB.
+		Where("id = ? AND user_id = ?", orderID, userID).
+		Preload("Client").
+		Preload("Items").
+		Preload("Items.Product").
+		Preload("Items.Product.Package").
+		First(&order).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
 		return
 	}
@@ -54,7 +60,13 @@ func GetOrders(c *gin.Context) {
 	userID := c.MustGet("userID").(uint)
 
 	var orders []models.Order
-	if err := database.DB.Where("user_id = ?", userID).Preload("Items").Find(&orders).Error; err != nil {
+	if err := database.DB.
+		Where("user_id = ?", userID).
+		Preload("Client").
+		Preload("Items").
+		Preload("Items.Product").
+		Preload("Items.Product.Package").
+		Find(&orders).Error; err != nil {
 		log.Printf("Failed to fetch orders for userID %v: %v", userID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch orders"})
 		return
@@ -70,7 +82,7 @@ func GetOrders(c *gin.Context) {
 // @Security BearerAuth
 // @Accept  json
 // @Produce  json
-// @Param order body models.Order true "Order data"
+// @Param order body object true "Order data"
 // @Success 201 {object} models.Order
 // @Failure 400 {object} map[string]string "Bad request"
 // @Failure 401 {object} map[string]string "Unauthorized"
@@ -79,20 +91,107 @@ func GetOrders(c *gin.Context) {
 func AddOrder(c *gin.Context) {
 	userID := c.MustGet("userID").(uint)
 
-	var newOrder models.Order
-	if err := c.ShouldBindJSON(&newOrder); err != nil {
+	var requestData struct {
+		ClientID uint   `json:"client_id"`
+		Status   string `json:"status"`
+		Items    []struct {
+			ProductID uint    `json:"product_id"`
+			Quantity  int     `json:"quantity"`
+			Price     float64 `json:"price"`
+			CostPrice float64 `json:"cost_price"`
+		} `json:"items"`
+	}
+
+	// Считываем данные из запроса
+	if err := c.ShouldBindJSON(&requestData); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	newOrder.UserID = userID
-	if err := database.DB.Create(&newOrder).Error; err != nil {
+	// Проверяем обязательные поля
+	if requestData.ClientID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "client_id is required"})
+		return
+	}
+
+	if requestData.Status == "" {
+		requestData.Status = "pending" // Устанавливаем статус по умолчанию
+	}
+
+	// Проверяем существование клиента и принадлежность пользователю
+	var client models.Client
+	if err := database.DB.Where("id = ? AND user_id = ?", requestData.ClientID, userID).First(&client).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid client ID or client does not belong to user"})
+		return
+	}
+
+	// Проверяем существование всех продуктов и принадлежность пользователю
+	for _, item := range requestData.Items {
+		var product models.Product
+		if err := database.DB.Where("id = ? AND user_id = ?", item.ProductID, userID).First(&product).Error; err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid product ID or product does not belong to user"})
+			return
+		}
+	}
+
+	// Создаем заказ
+	newOrder := models.Order{
+		ClientID: requestData.ClientID,
+		Status:   requestData.Status,
+		UserID:   userID,
+	}
+
+	// Начинаем транзакцию
+	tx := database.DB.Begin()
+
+	// Сохраняем заказ
+	if err := tx.Create(&newOrder).Error; err != nil {
+		tx.Rollback()
 		log.Printf("Failed to add order: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add order"})
 		return
 	}
 
-	c.JSON(http.StatusCreated, newOrder)
+	// Создаем элементы заказа
+	var orderItems []models.OrderItem
+	for _, item := range requestData.Items {
+		orderItems = append(orderItems, models.OrderItem{
+			OrderID:    newOrder.ID,
+			ProductID:  item.ProductID,
+			Quantity:   item.Quantity,
+			Price:      item.Price,
+			Cost_price: item.CostPrice,
+		})
+	}
+
+	// Сохраняем элементы заказа
+	if len(orderItems) > 0 {
+		if err := tx.Create(&orderItems).Error; err != nil {
+			tx.Rollback()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create order items"})
+			return
+		}
+	}
+
+	// Подтверждаем транзакцию
+	if err := tx.Commit().Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to commit transaction"})
+		return
+	}
+
+	// Загружаем полную информацию о созданном заказе
+	var createdOrder models.Order
+	if err := database.DB.
+		Preload("Client").
+		Preload("Items").
+		Preload("Items.Product").
+		Preload("Items.Product.Package").
+		First(&createdOrder, newOrder.ID).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load created order"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, createdOrder)
 }
 
 // UpdateOrder обновляет заказ
