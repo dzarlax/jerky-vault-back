@@ -125,15 +125,6 @@ func AddOrder(c *gin.Context) {
 		return
 	}
 
-	// Проверяем существование всех продуктов и принадлежность пользователю
-	for _, item := range requestData.Items {
-		var product models.Product
-		if err := database.DB.Where("id = ? AND user_id = ?", item.ProductID, userID).First(&product).Error; err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid product ID or product does not belong to user"})
-			return
-		}
-	}
-
 	// Создаем заказ
 	newOrder := models.Order{
 		ClientID: requestData.ClientID,
@@ -152,15 +143,29 @@ func AddOrder(c *gin.Context) {
 		return
 	}
 
-	// Создаем элементы заказа
+	// Создаем элементы заказа с проверкой продуктов и автозаполнением cost_price
 	var orderItems []models.OrderItem
 	for _, item := range requestData.Items {
+		// Получаем продукт для проверки и получения cost
+		var product models.Product
+		if err := database.DB.Where("id = ? AND user_id = ?", item.ProductID, userID).First(&product).Error; err != nil {
+			tx.Rollback()
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid product ID or product does not belong to user"})
+			return
+		}
+
+		// Определяем cost_price: используем переданное значение или берем из продукта
+		costPrice := product.Cost // По умолчанию берем из продукта
+		if item.CostPrice != 0 {
+			costPrice = item.CostPrice // Если указано, используем переданное значение
+		}
+
 		orderItems = append(orderItems, models.OrderItem{
 			OrderID:    newOrder.ID,
 			ProductID:  item.ProductID,
 			Quantity:   item.Quantity,
 			Price:      item.Price,
-			Cost_price: item.CostPrice,
+			Cost_price: costPrice,
 		})
 	}
 
@@ -261,15 +266,29 @@ func UpdateOrder(c *gin.Context) {
 		return
 	}
 
-	// Добавляем новые элементы заказа
+	// Добавляем новые элементы заказа с автозаполнением cost_price
 	var newOrderItems []models.OrderItem
 	for _, item := range requestData.Items {
+		// Получаем продукт для получения cost если нужно
+		var product models.Product
+		if err := database.DB.Where("id = ? AND user_id = ?", item.ProductID, userID).First(&product).Error; err != nil {
+			tx.Rollback()
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid product ID or product does not belong to user"})
+			return
+		}
+
+		// Определяем cost_price: используем переданное значение или берем из продукта
+		costPrice := product.Cost // По умолчанию берем из продукта
+		if item.CostPrice != 0 {
+			costPrice = item.CostPrice // Если указано, используем переданное значение
+		}
+
 		newOrderItems = append(newOrderItems, models.OrderItem{
 			OrderID:    existingOrder.ID,
 			ProductID:  item.ProductID,
 			Quantity:   item.Quantity,
 			Price:      item.Price,
-			Cost_price: item.CostPrice,
+			Cost_price: costPrice,
 		})
 	}
 
