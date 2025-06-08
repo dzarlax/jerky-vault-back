@@ -585,7 +585,7 @@ API использует JWT (JSON Web Token) для аутентификаци�
   {
     "id": 1,
     "client_id": 1,
-    "status": "pending",
+    "status": "new",
     "user_id": 1,
     "client": {
       "id": 1,
@@ -640,7 +640,7 @@ API использует JWT (JSON Web Token) для аутентификаци�
 ```json
 {
   "client_id": 1,
-  "status": "pending",
+  "status": "new",
   "items": [
     {
       "product_id": 1,
@@ -659,14 +659,15 @@ API использует JWT (JSON Web Token) для аутентификаци�
 
 **Примечания:**
 - `cost_price` - необязательное поле. Если не указано, автоматически используется себестоимость из продукта
-- `status` - необязательное поле. По умолчанию устанавливается "pending"
+- `status` - необязательное поле. По умолчанию устанавливается "new"
+- Возможные статусы заказа: "new", "in_progress", "ready", "finished", "canceled"
 
 **Response (201):**
 ```json
 {
   "id": 1,
   "client_id": 1,
-  "status": "pending",
+  "status": "new",
   "user_id": 1,
   "client": {
     "id": 1,
@@ -744,7 +745,7 @@ API использует JWT (JSON Web Token) для аутентификаци�
 **Request Body:**
 ```json
 {
-  "status": "completed"
+  "status": "ready"
 }
 ```
 
@@ -826,18 +827,30 @@ API использует JWT (JSON Web Token) для аутентификаци�
       "id": 1,
       "client_name": "Иван Иванов",
       "total_amount": 1500.00,
-      "status": "pending",
+      "status": "new",
       "order_date": "2024-01-01T00:00:00Z"
     }
   ],
   "order_type_distribution": [
     {
-      "type": "pending",
-      "count": 5
+      "type": "new",
+      "count": 3
     },
     {
-      "type": "completed",
-      "count": 37
+      "type": "in_progress",
+      "count": 2
+    },
+    {
+      "type": "ready",
+      "count": 1
+    },
+    {
+      "type": "finished",
+      "count": 35
+    },
+    {
+      "type": "canceled",
+      "count": 1
     }
   ]
 }
@@ -999,7 +1012,7 @@ API использует JWT (JSON Web Token) для аутентификаци�
 {
   "id": "uint",
   "client_id": "uint",
-  "status": "string",
+  "status": "string (new|in_progress|ready|finished|canceled)",
   "total_amount": "float64",
   "order_date": "timestamp",
   "delivery_date": "timestamp",

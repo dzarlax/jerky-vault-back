@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"log"
+	"mobile-backend-go/constants"
 	"mobile-backend-go/database"
 	"mobile-backend-go/models"
 	"net/http"
@@ -115,7 +116,7 @@ func AddOrder(c *gin.Context) {
 	}
 
 	if requestData.Status == "" {
-		requestData.Status = "pending" // Устанавливаем статус по умолчанию
+		requestData.Status = constants.OrderStatusNew // Устанавливаем статус по умолчанию
 	}
 
 	// Проверяем существование клиента и принадлежность пользователю

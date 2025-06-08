@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"log"
+	"mobile-backend-go/constants"
 	"mobile-backend-go/database"
 	"mobile-backend-go/models"
 	"net/http"
@@ -133,7 +134,7 @@ func GetDashboardData(c *gin.Context) {
 	if err := database.DB.Table("orders").
 		Select("orders.id, orders.status, orders.created_at, clients.name AS client_name, clients.surname AS client_surname").
 		Joins("JOIN clients ON orders.client_id = clients.id").
-		Where("orders.status != ? AND orders.user_id = ? AND orders.deleted_at is NULL", "Finished", userIDUint).
+		Where("orders.status NOT IN (?, ?) AND orders.user_id = ? AND orders.deleted_at is NULL", constants.OrderStatusFinished, constants.OrderStatusCanceled, userIDUint).
 		Scan(&dashboard.PendingOrders).Error; err != nil {
 		handleError(c, "Failed to fetch pending orders", err)
 		return
