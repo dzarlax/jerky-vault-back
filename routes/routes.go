@@ -46,8 +46,9 @@ func SetupRoutes(router *gin.Engine) {
 		protectedRoutes.POST("/prices", controllers.AddPrice)
 		protectedRoutes.GET("/prices", controllers.GetPrices)
 
-		// Маршрут для дашборда
+		// Маршруты для дашборда
 		protectedRoutes.GET("/dashboard", controllers.GetDashboardData)
+		protectedRoutes.GET("/dashboard/profit", controllers.GetProfitData)
 
 		// Маршруты для клиентов
 		protectedRoutes.GET("/clients", controllers.GetClients)

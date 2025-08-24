@@ -6,35 +6,33 @@ import (
 	"mobile-backend-go/database"
 	"mobile-backend-go/models"
 	"net/http"
-	"sync"
 
 	"github.com/gin-gonic/gin"
 )
 
-// Структура для распределения ингредиентов по типам
-type TypeDistribution struct {
+// Структура для недавних заказов с суммой
+type RecentOrder struct {
+	ID          uint    `json:"id"`
+	ClientName  string  `json:"client_name"`
+	TotalAmount float64 `json:"total_amount"`
+	Status      string  `json:"status"`
+	OrderDate   string  `json:"order_date"`
+}
+
+// Структура для распределения заказов по типам
+type OrderTypeDistribution struct {
 	Type  string `json:"type"`
 	Count int64  `json:"count"`
 }
 
-// Структура для отображения незавершённых заказов
-type PendingOrder struct {
-	ID            uint   `json:"id"`
-	Status        string `json:"status"`
-	CreatedAt     string `json:"created_at"`
-	ClientName    string `json:"client_name"`
-	ClientSurname string `json:"client_surname"`
-}
-
 // Структура для данных дашборда
 type DashboardData struct {
-	TotalRecipes     int64              `json:"totalRecipes"`
-	TotalIngredients int64              `json:"totalIngredients"`
-	TotalProducts    int64              `json:"totalProducts"`
-	TotalOrders      int64              `json:"totalOrders"`
-	TopRecipes       []models.Recipe    `json:"topRecipes"`
-	TypeDistribution []TypeDistribution `json:"typeDistribution"`
-	PendingOrders    []PendingOrder     `json:"pendingOrders"`
+	TotalRecipes          int64                   `json:"total_recipes"`
+	TotalProducts         int64                   `json:"total_products"`
+	TotalOrders           int64                   `json:"total_orders"`
+	PendingOrders         int64                   `json:"pending_orders"`
+	RecentOrders          []RecentOrder           `json:"recent_orders"`
+	OrderTypeDistribution []OrderTypeDistribution `json:"order_type_distribution"`
 }
 
 // Функция для обработки ошибок
@@ -62,84 +60,137 @@ func GetDashboardData(c *gin.Context) {
 	}
 
 	userIDUint := userID.(uint)
-	var wg sync.WaitGroup
 	var dashboard DashboardData
-	errors := make(chan error, 5) // Канал для ошибок
 
-	// Используем горутины для параллельного выполнения запросов
-	wg.Add(5)
-
-	go func() {
-		defer wg.Done()
-		if err := database.DB.Model(&models.Recipe{}).Where("user_id = ?", userIDUint).Count(&dashboard.TotalRecipes).Error; err != nil {
-			errors <- err
-		}
-	}()
-
-	go func() {
-		defer wg.Done()
-		// Ингредиенты остаются общими (без фильтрации по user_id)
-		if err := database.DB.Model(&models.Ingredient{}).Count(&dashboard.TotalIngredients).Error; err != nil {
-			errors <- err
-		}
-	}()
-
-	go func() {
-		defer wg.Done()
-		// Товары должны фильтроваться по пользователю
-		if err := database.DB.Model(&models.Product{}).Where("user_id = ?", userIDUint).Count(&dashboard.TotalProducts).Error; err != nil {
-			errors <- err
-		}
-	}()
-
-	go func() {
-		defer wg.Done()
-		// Заказы должны фильтроваться по пользователю
-		if err := database.DB.Model(&models.Order{}).Where("user_id = ?", userIDUint).Count(&dashboard.TotalOrders).Error; err != nil {
-			errors <- err
-		}
-	}()
-
-	go func() {
-		defer wg.Done()
-		// Распределение типов ингредиентов - только те, что используются в рецептах пользователя
-		if err := database.DB.Table("ingredients").
-			Select("ingredients.type, COUNT(DISTINCT ingredients.id) as count").
-			Joins("JOIN recipe_ingredients ON ingredients.id = recipe_ingredients.ingredient_id").
-			Joins("JOIN recipes ON recipe_ingredients.recipe_id = recipes.id").
-			Where("recipes.user_id = ? AND recipe_ingredients.deleted_at is NULL", userIDUint).
-			Group("ingredients.type").
-			Scan(&dashboard.TypeDistribution).Error; err != nil {
-			errors <- err
-		}
-	}()
-
-	// Ожидаем завершения всех горутин
-	wg.Wait()
-	close(errors)
-
-	// Проверяем на ошибки
-	for err := range errors {
-		handleError(c, "Failed to fetch dashboard data", err)
+	// Получаем общее количество рецептов
+	if err := database.DB.Model(&models.Recipe{}).Where("user_id = ?", userIDUint).Count(&dashboard.TotalRecipes).Error; err != nil {
+		handleError(c, "Failed to fetch total recipes", err)
 		return
 	}
 
-	// Получаем топовые рецепты (не параллельно, так как нужен порядок выполнения)
-	if err := database.DB.Where("user_id = ?", userIDUint).Limit(5).Find(&dashboard.TopRecipes).Error; err != nil {
-		handleError(c, "Failed to fetch top recipes", err)
+	// Получаем общее количество продуктов
+	if err := database.DB.Model(&models.Product{}).Where("user_id = ?", userIDUint).Count(&dashboard.TotalProducts).Error; err != nil {
+		handleError(c, "Failed to fetch total products", err)
 		return
 	}
 
-	// Получаем незавершенные заказы пользователя
+	// Получаем общее количество заказов
+	if err := database.DB.Model(&models.Order{}).Where("user_id = ?", userIDUint).Count(&dashboard.TotalOrders).Error; err != nil {
+		handleError(c, "Failed to fetch total orders", err)
+		return
+	}
+
+	// Получаем количество незавершенных заказов
+	if err := database.DB.Model(&models.Order{}).
+		Where("user_id = ? AND status NOT IN (?, ?)", userIDUint, constants.OrderStatusFinished, constants.OrderStatusCanceled).
+		Count(&dashboard.PendingOrders).Error; err != nil {
+		handleError(c, "Failed to fetch pending orders count", err)
+		return
+	}
+
+	// Получаем недавние заказы с расчетом суммы
+	type OrderSummary struct {
+		ID         uint    `json:"id"`
+		ClientName string  `json:"client_name"`
+		Status     string  `json:"status"`
+		CreatedAt  string  `json:"created_at"`
+		Total      float64 `json:"total"`
+	}
+
+	var orderSummaries []OrderSummary
 	if err := database.DB.Table("orders").
-		Select("orders.id, orders.status, orders.created_at, clients.name AS client_name, clients.surname AS client_surname").
+		Select(`orders.id, clients.name as client_name, orders.status, orders.created_at,
+			COALESCE(SUM(order_items.price * order_items.quantity), 0) as total`).
 		Joins("JOIN clients ON orders.client_id = clients.id").
-		Where("orders.status NOT IN (?, ?) AND orders.user_id = ? AND orders.deleted_at is NULL", constants.OrderStatusFinished, constants.OrderStatusCanceled, userIDUint).
-		Scan(&dashboard.PendingOrders).Error; err != nil {
-		handleError(c, "Failed to fetch pending orders", err)
+		Joins("LEFT JOIN order_items ON orders.id = order_items.order_id AND order_items.deleted_at IS NULL").
+		Where("orders.user_id = ? AND orders.deleted_at IS NULL", userIDUint).
+		Group("orders.id, clients.name, orders.status, orders.created_at").
+		Order("orders.created_at DESC").
+		Limit(5).
+		Scan(&orderSummaries).Error; err != nil {
+		handleError(c, "Failed to fetch recent orders", err)
+		return
+	}
+
+	// Конвертируем в нужный формат
+	for _, order := range orderSummaries {
+		dashboard.RecentOrders = append(dashboard.RecentOrders, RecentOrder{
+			ID:          order.ID,
+			ClientName:  order.ClientName,
+			TotalAmount: order.Total,
+			Status:      order.Status,
+			OrderDate:   order.CreatedAt,
+		})
+	}
+
+	// Получаем распределение заказов по типам (статусам)
+	if err := database.DB.Model(&models.Order{}).
+		Select("status as type, COUNT(*) as count").
+		Where("user_id = ?", userIDUint).
+		Group("status").
+		Scan(&dashboard.OrderTypeDistribution).Error; err != nil {
+		handleError(c, "Failed to fetch order type distribution", err)
 		return
 	}
 
 	// Формируем ответ
 	c.JSON(http.StatusOK, dashboard)
+}
+
+// Структура для данных о прибыли
+type ProfitData struct {
+	TotalRevenue float64 `json:"total_revenue"`
+	TotalCosts   float64 `json:"total_costs"`
+	TotalProfit  float64 `json:"total_profit"`
+	OrderCount   int64   `json:"order_count"`
+}
+
+// GetProfitData возвращает данные о прибыли
+// @Summary Get profit data
+// @Description Fetch profit statistics for completed orders
+// @Tags Dashboard
+// @Security BearerAuth
+// @Produce  json
+// @Success 200 {object} ProfitData
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal Server Error"
+// @Router /api/dashboard/profit [get]
+func GetProfitData(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		log.Println("Unauthorized access attempt")
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	userIDUint := userID.(uint)
+	var profitData ProfitData
+
+	type ProfitSummary struct {
+		TotalRevenue float64 `json:"total_revenue"`
+		TotalCosts   float64 `json:"total_costs"`
+		OrderCount   int64   `json:"order_count"`
+	}
+
+	var summary ProfitSummary
+	if err := database.DB.Table("order_items").
+		Select(`
+			COALESCE(SUM(order_items.price * order_items.quantity), 0) as total_revenue,
+			COALESCE(SUM(order_items.cost_price * order_items.quantity), 0) as total_costs,
+			COUNT(DISTINCT orders.id) as order_count
+		`).
+		Joins("JOIN orders ON order_items.order_id = orders.id").
+		Where("orders.user_id = ? AND orders.status = ? AND orders.deleted_at IS NULL AND order_items.deleted_at IS NULL",
+			userIDUint, constants.OrderStatusFinished).
+		Scan(&summary).Error; err != nil {
+		handleError(c, "Failed to fetch profit data", err)
+		return
+	}
+
+	profitData.TotalRevenue = summary.TotalRevenue
+	profitData.TotalCosts = summary.TotalCosts
+	profitData.TotalProfit = summary.TotalRevenue - summary.TotalCosts
+	profitData.OrderCount = summary.OrderCount
+
+	c.JSON(http.StatusOK, profitData)
 }
