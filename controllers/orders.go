@@ -49,7 +49,7 @@ func GetOrder(c *gin.Context) {
 
 // GetOrders возвращает список всех заказов
 // @Summary Get list of orders
-// @Description Get all orders for the authenticated user
+// @Description Get all orders for the authenticated user, sorted by creation date (newest first)
 // @Tags Orders
 // @Security BearerAuth
 // @Produce  json
@@ -67,6 +67,7 @@ func GetOrders(c *gin.Context) {
 		Preload("Items").
 		Preload("Items.Product").
 		Preload("Items.Product.Package").
+		Order("created_at DESC").
 		Find(&orders).Error; err != nil {
 		log.Printf("Failed to fetch orders for userID %v: %v", userID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch orders"})
