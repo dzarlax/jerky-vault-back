@@ -95,6 +95,7 @@ func AddOrder(c *gin.Context) {
 	var requestData struct {
 		ClientID uint   `json:"client_id"`
 		Status   string `json:"status"`
+		Comment  string `json:"comment"`
 		Items    []struct {
 			ProductID uint    `json:"product_id"`
 			Quantity  int     `json:"quantity"`
@@ -130,6 +131,7 @@ func AddOrder(c *gin.Context) {
 	newOrder := models.Order{
 		ClientID: requestData.ClientID,
 		Status:   requestData.Status,
+		Comment:  requestData.Comment,
 		UserID:   userID,
 	}
 
@@ -232,6 +234,7 @@ func UpdateOrder(c *gin.Context) {
 	var requestData struct {
 		ClientID uint   `json:"client_id"`
 		Status   string `json:"status"`
+		Comment  string `json:"comment"`
 		Items    []struct {
 			ProductID uint    `json:"product_id"`
 			Quantity  int     `json:"quantity"`
@@ -249,6 +252,7 @@ func UpdateOrder(c *gin.Context) {
 	// Обновляем поля заказа
 	existingOrder.ClientID = requestData.ClientID
 	existingOrder.Status = requestData.Status
+	existingOrder.Comment = requestData.Comment
 
 	// Начинаем транзакцию
 	tx := database.DB.Begin()

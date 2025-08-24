@@ -14,6 +14,7 @@ type Order struct {
 	DeletedAt gorm.DeletedAt `json:"deleted_at,omitempty" gorm:"index" swaggerignore:"true"`
 	ClientID  uint           `json:"client_id"`
 	Status    string         `json:"status" gorm:"not null"`
+	Comment   string         `json:"comment" gorm:"type:text"`
 	UserID    uint           `json:"user_id"`
 	Client    Client         `json:"client" gorm:"foreignKey:ClientID"`
 	User      User           `json:"user" gorm:"foreignKey:UserID"`
