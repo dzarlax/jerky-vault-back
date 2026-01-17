@@ -7,57 +7,61 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// SetupRoutes инициализирует маршруты для API
+// SetupRoutes initializes API routes
 func SetupRoutes(router *gin.Engine) {
-	// Маршруты для аутентификации
+	// Global rate limiting: 60 requests per minute
+	router.Use(middleware.RateLimitMiddleware(60))
+
+	// Authentication routes (with stricter limit)
 	authRoutes := router.Group("/api/auth")
+	authRoutes.Use(middleware.RateLimitMiddleware(10)) // 10 requests per minute for auth
 	{
 		authRoutes.POST("/register", controllers.Register)
 		authRoutes.POST("/login", controllers.Login)
 	}
 
-	// Группа защищенных маршрутов
+	// Protected routes group
 	protectedRoutes := router.Group("/api")
 	protectedRoutes.Use(middleware.JWTMiddleware())
 	{
-		// Маршруты для рецептов
+		// Recipe routes
 		protectedRoutes.GET("/recipes", controllers.GetRecipes)
 		protectedRoutes.GET("/recipes/:id", controllers.GetRecipe)
 		protectedRoutes.POST("/recipes", controllers.CreateRecipe)
 		protectedRoutes.DELETE("/recipes/:id", controllers.DeleteRecipe)
 
-		// Маршруты для ингредиентов
+		// Ingredient routes
 		protectedRoutes.POST("/ingredients", controllers.CreateIngredient)
 		protectedRoutes.GET("/ingredients", controllers.GetIngredients)
 		protectedRoutes.GET("/ingredients/check", controllers.CheckIngredientExists)
 
-		// Маршруты для ингредиентов рецептов
+		// Recipe ingredient routes
 		protectedRoutes.POST("/recipes/:id/ingredients", controllers.AddIngredientToRecipe)
 		protectedRoutes.DELETE("/recipes/:id/ingredients/:ingredient_id", controllers.DeleteIngredientFromRecipe)
 
-		// Маршруты для продуктов
+		// Product routes
 		protectedRoutes.GET("/products", controllers.GetProducts)
 		protectedRoutes.GET("/products/:id", controllers.GetProductByID)
 		protectedRoutes.POST("/products", controllers.CreateProduct)
 		protectedRoutes.PUT("/products/:id", controllers.UpdateProduct)
 		protectedRoutes.DELETE("/products/:id", controllers.DeleteProduct)
 
-		// Маршруты для цен
+		// Price routes
 		protectedRoutes.POST("/prices", controllers.AddPrice)
 		protectedRoutes.GET("/prices", controllers.GetPrices)
 
-		// Маршруты для дашборда
+		// Dashboard routes
 		protectedRoutes.GET("/dashboard", controllers.GetDashboardData)
 		protectedRoutes.GET("/dashboard/profit", controllers.GetProfitData)
 
-		// Маршруты для клиентов
+		// Client routes
 		protectedRoutes.GET("/clients", controllers.GetClients)
 		protectedRoutes.GET("/clients/:id", controllers.GetClient)
 		protectedRoutes.POST("/clients", controllers.AddClient)
 		protectedRoutes.PUT("/clients/:id", controllers.UpdateClient)
 		protectedRoutes.DELETE("/clients/:id", controllers.DeleteClient)
 
-		// Маршруты для заказов
+		// Order routes
 		protectedRoutes.GET("/orders", controllers.GetOrders)
 		protectedRoutes.GET("/orders/:id", controllers.GetOrder)
 		protectedRoutes.POST("/orders", controllers.AddOrder)
@@ -65,11 +69,11 @@ func SetupRoutes(router *gin.Engine) {
 		protectedRoutes.PUT("/orders/:id/status", controllers.UpdateOrderStatus)
 		protectedRoutes.DELETE("/orders/:id", controllers.DeleteOrder)
 
-		// Маршруты для упаковок
+		// Package routes
 		protectedRoutes.GET("/packages", controllers.GetPackages)
 		protectedRoutes.POST("/packages", controllers.AddPackage)
 
-		// Маршрут для смены пароля
+		// Change password route
 		protectedRoutes.POST("/profile/change-password", controllers.ChangePassword)
 
 	}

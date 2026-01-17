@@ -10,7 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// AddIngredientToRecipe добавляет ингредиент в рецепт
+// AddIngredientToRecipe adds ingredient to recipe
 // @Summary Add an ingredient to a recipe
 // @Description Add an ingredient to a recipe by recipe ID
 // @Tags Recipe Ingredients
@@ -41,7 +41,7 @@ func AddIngredientToRecipe(c *gin.Context) {
 
 	recipeIngredient.RecipeID = uint(recipeID)
 
-	// Проверка принадлежности рецепта пользователю
+	// Verify recipe ownership
 	var recipe models.Recipe
 	if err := database.DB.Where("id = ? AND user_id = ?", recipeID, userID).First(&recipe).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Recipe not found"})
@@ -56,7 +56,7 @@ func AddIngredientToRecipe(c *gin.Context) {
 	c.JSON(http.StatusCreated, recipeIngredient)
 }
 
-// DeleteIngredientFromRecipe удаляет ингредиент из рецепта
+// DeleteIngredientFromRecipe deletes ingredient from recipe
 // @Summary Delete an ingredient from a recipe
 // @Description Delete an ingredient from a recipe by recipe ID and ingredient ID
 // @Tags Recipe Ingredients

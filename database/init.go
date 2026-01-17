@@ -5,9 +5,9 @@ import (
     "mobile-backend-go/models"
 )
 
-// CreateTables создает необходимые таблицы в базе данных с использованием GORM
+// CreateTables creates necessary database tables using GORM
 func CreateTables() {
-    // Автоматическая миграция моделей для создания таблиц с помощью GORM
+    // Auto-migrate models to create tables using GORM
     err := DB.AutoMigrate(
         &models.User{},
         &models.Recipe{},
@@ -25,8 +25,8 @@ func CreateTables() {
     )
     
     if err != nil {
-        log.Fatalf("Ошибка при создании таблиц: %v", err)
+        log.Fatalf("Error creating tables: %v", err)
     }
 
-    log.Println("Все таблицы успешно созданы.")
+    log.Println("All tables successfully created.")
 }

@@ -9,7 +9,7 @@ import (
     "strconv"
 )
 
-// GetClient возвращает клиента по ID
+// GetClient returns a client by ID
 // @Summary Get a client by ID
 // @Description Fetch a client by its ID
 // @Tags Clients
@@ -39,7 +39,7 @@ func GetClient(c *gin.Context) {
     c.JSON(http.StatusOK, client)
 }
 
-// GetClients возвращает список всех клиентов
+// GetClients returns list of all clients
 // @Summary Get list of clients
 // @Description Get all clients for the authenticated user
 // @Tags Clients
@@ -62,7 +62,7 @@ func GetClients(c *gin.Context) {
     c.JSON(http.StatusOK, clients)
 }
 
-// AddClient добавляет нового клиента
+// AddClient adds a new client
 // @Summary Add a new client
 // @Description Create a new client for the authenticated user
 // @Tags Clients
@@ -94,7 +94,7 @@ func AddClient(c *gin.Context) {
     c.JSON(http.StatusCreated, newClient)
 }
 
-// UpdateClient обновляет данные клиента
+// UpdateClient updates client data
 // @Summary Update a client
 // @Description Update a client's details
 // @Tags Clients
@@ -136,7 +136,7 @@ func UpdateClient(c *gin.Context) {
     c.JSON(http.StatusOK, gin.H{"message": "Client updated successfully"})
 }
 
-// DeleteClient удаляет клиента
+// DeleteClient deletes a client
 // @Summary Delete a client
 // @Description Delete a client by its ID
 // @Tags Clients

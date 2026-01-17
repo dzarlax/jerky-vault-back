@@ -10,7 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Структура для недавних заказов с суммой
+// Structure for recent orders with total amount
 type RecentOrder struct {
 	ID          uint    `json:"id"`
 	ClientName  string  `json:"client_name"`
@@ -19,13 +19,13 @@ type RecentOrder struct {
 	OrderDate   string  `json:"order_date"`
 }
 
-// Структура для распределения заказов по типам
+// Structure for order type distribution
 type OrderTypeDistribution struct {
 	Type  string `json:"type"`
 	Count int64  `json:"count"`
 }
 
-// Структура для данных дашборда
+// Structure for dashboard data
 type DashboardData struct {
 	TotalRecipes          int64                   `json:"total_recipes"`
 	TotalProducts         int64                   `json:"total_products"`
@@ -35,13 +35,13 @@ type DashboardData struct {
 	OrderTypeDistribution []OrderTypeDistribution `json:"order_type_distribution"`
 }
 
-// Функция для обработки ошибок
+// Error handling function
 func handleError(c *gin.Context, message string, err error) {
 	log.Printf("%s: %v", message, err)
 	c.JSON(http.StatusInternalServerError, gin.H{"error": message})
 }
 
-// GetDashboardData возвращает данные для дашборда
+// GetDashboardData returns dashboard data
 // @Summary Get dashboard data
 // @Description Fetch statistics for the dashboard
 // @Tags Dashboard
@@ -62,25 +62,25 @@ func GetDashboardData(c *gin.Context) {
 	userIDUint := userID.(uint)
 	var dashboard DashboardData
 
-	// Получаем общее количество рецептов
+	// Get total recipes count
 	if err := database.DB.Model(&models.Recipe{}).Where("user_id = ?", userIDUint).Count(&dashboard.TotalRecipes).Error; err != nil {
 		handleError(c, "Failed to fetch total recipes", err)
 		return
 	}
 
-	// Получаем общее количество продуктов
+	// Get total products count
 	if err := database.DB.Model(&models.Product{}).Where("user_id = ?", userIDUint).Count(&dashboard.TotalProducts).Error; err != nil {
 		handleError(c, "Failed to fetch total products", err)
 		return
 	}
 
-	// Получаем общее количество заказов
+	// Get total orders count
 	if err := database.DB.Model(&models.Order{}).Where("user_id = ?", userIDUint).Count(&dashboard.TotalOrders).Error; err != nil {
 		handleError(c, "Failed to fetch total orders", err)
 		return
 	}
 
-	// Получаем количество незавершенных заказов
+	// Get pending orders count
 	if err := database.DB.Model(&models.Order{}).
 		Where("user_id = ? AND status NOT IN (?, ?)", userIDUint, constants.OrderStatusFinished, constants.OrderStatusCanceled).
 		Count(&dashboard.PendingOrders).Error; err != nil {
@@ -88,7 +88,7 @@ func GetDashboardData(c *gin.Context) {
 		return
 	}
 
-	// Получаем недавние заказы с расчетом суммы
+	// Get recent orders with total amount calculation
 	type OrderSummary struct {
 		ID         uint    `json:"id"`
 		ClientName string  `json:"client_name"`
@@ -112,7 +112,7 @@ func GetDashboardData(c *gin.Context) {
 		return
 	}
 
-	// Конвертируем в нужный формат
+	// Convert to required format
 	for _, order := range orderSummaries {
 		dashboard.RecentOrders = append(dashboard.RecentOrders, RecentOrder{
 			ID:          order.ID,
@@ -123,7 +123,7 @@ func GetDashboardData(c *gin.Context) {
 		})
 	}
 
-	// Получаем распределение заказов по типам (статусам)
+	// Get order distribution by type (status)
 	if err := database.DB.Model(&models.Order{}).
 		Select("status as type, COUNT(*) as count").
 		Where("user_id = ?", userIDUint).
@@ -133,11 +133,11 @@ func GetDashboardData(c *gin.Context) {
 		return
 	}
 
-	// Формируем ответ
+	// Form response
 	c.JSON(http.StatusOK, dashboard)
 }
 
-// Структура для данных о прибыли
+// Structure for profit data
 type ProfitData struct {
 	TotalRevenue float64 `json:"total_revenue"`
 	TotalCosts   float64 `json:"total_costs"`
@@ -145,7 +145,7 @@ type ProfitData struct {
 	OrderCount   int64   `json:"order_count"`
 }
 
-// GetProfitData возвращает данные о прибыли
+// GetProfitData returns profit data
 // @Summary Get profit data
 // @Description Fetch profit statistics for completed orders
 // @Tags Dashboard

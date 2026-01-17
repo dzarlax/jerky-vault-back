@@ -1,7 +1,7 @@
-// Убедитесь, что в начале файла указано название пакета
+// Ensure the package name is specified at the beginning of the file
 package models
 
-// Определение структуры запроса для продукта
+// Definition of product request structure
 type ProductRequest struct {
 	Product Product         `json:"product"`
 	Options []ProductOption `json:"options"`

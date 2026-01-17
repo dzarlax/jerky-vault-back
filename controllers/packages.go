@@ -7,7 +7,7 @@ import (
     "net/http"
 )
 
-// GetPackages возвращает список всех упаковок
+// GetPackages returns list of all packages
 // @Summary Get list of packages
 // @Description Get all packages for the authenticated user
 // @Tags Packages
@@ -29,7 +29,7 @@ func GetPackages(c *gin.Context) {
     c.JSON(http.StatusOK, packages)
 }
 
-// AddPackage добавляет новую упаковку
+// AddPackage adds a new package
 // @Summary Add a new package
 // @Description Create a new package for the authenticated user
 // @Tags Packages

@@ -6,7 +6,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// ProductOption представляет модель опций продукта
+// ProductOption represents product options model
 type ProductOption struct {
 	ID        uint           `json:"id" gorm:"primaryKey"`
 	CreatedAt time.Time      `json:"created_at"`

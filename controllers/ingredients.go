@@ -9,7 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// CreateIngredient создает новый ингредиент
+// CreateIngredient creates a new ingredient
 // @Summary Create a new ingredient
 // @Description Create a new ingredient with type and name
 // @Tags Ingredients
@@ -30,7 +30,7 @@ func CreateIngredient(c *gin.Context) {
 		return
 	}
 
-	// Нормализуем имя (убираем лишние пробелы)
+	// Normalize name (remove extra spaces)
 	newIngredient.Name = strings.TrimSpace(newIngredient.Name)
 	newIngredient.Type = strings.TrimSpace(newIngredient.Type)
 
@@ -44,7 +44,7 @@ func CreateIngredient(c *gin.Context) {
 		return
 	}
 
-	// Проверяем уникальность имени
+	// Check name uniqueness
 	var existingIngredient models.Ingredient
 	if err := database.DB.Where("name = ?", newIngredient.Name).First(&existingIngredient).Error; err == nil {
 		c.JSON(http.StatusConflict, gin.H{
@@ -57,7 +57,7 @@ func CreateIngredient(c *gin.Context) {
 	}
 
 	if err := database.DB.Create(&newIngredient).Error; err != nil {
-		// Проверяем, если это ошибка уникальности на уровне БД
+		// Check if this is a database-level uniqueness error
 		if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
 			c.JSON(http.StatusConflict, gin.H{
 				"error": "Ingredient with this name already exists",
@@ -73,7 +73,7 @@ func CreateIngredient(c *gin.Context) {
 	c.JSON(http.StatusCreated, newIngredient)
 }
 
-// CheckIngredientExists проверяет существование ингредиента по имени
+// CheckIngredientExists checks if ingredient exists by name
 // @Summary Check if ingredient exists
 // @Description Check if an ingredient with the given name already exists
 // @Tags Ingredients
@@ -98,7 +98,7 @@ func CheckIngredientExists(c *gin.Context) {
 		"name":   name,
 	}
 
-	// Если ингредиент существует, добавляем его ID
+	// If ingredient exists, add its ID
 	if count > 0 {
 		var ingredient models.Ingredient
 		if err := database.DB.Where("name = ?", name).First(&ingredient).Error; err == nil {
@@ -110,7 +110,7 @@ func CheckIngredientExists(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-// GetIngredients возвращает список всех ингредиентов
+// GetIngredients returns list of all ingredients
 // @Summary Get list of ingredients
 // @Description Get all ingredients
 // @Tags Ingredients

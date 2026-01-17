@@ -9,13 +9,13 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// ChangePasswordRequest представляет структуру запроса для смены пароля
+// ChangePasswordRequest represents password change request structure
 type ChangePasswordRequest struct {
 	CurrentPassword string `json:"currentPassword"`
 	NewPassword     string `json:"newPassword"`
 }
 
-// ChangePassword изменяет пароль пользователя
+// ChangePassword changes user password
 // @Summary Change user password
 // @Description Change the password for the authenticated user
 // @Tags Profile
@@ -49,20 +49,20 @@ func ChangePassword(c *gin.Context) {
 		return
 	}
 
-	// Проверка текущего пароля
+	// Verify current password
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(payload.CurrentPassword)); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Current password is incorrect"})
 		return
 	}
 
-	// Хеширование нового пароля
+	// Hash new password
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(payload.NewPassword), bcrypt.DefaultCost)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to hash password"})
 		return
 	}
 
-	// Обновление пароля пользователя в базе данных
+	// Update user password in database
 	user.Password = string(hashedPassword)
 	if err := database.DB.Save(&user).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to change password"})

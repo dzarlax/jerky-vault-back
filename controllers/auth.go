@@ -1,6 +1,7 @@
 package controllers
 
 import (
+    "fmt"
     "github.com/gin-gonic/gin"
     "github.com/dgrijalva/jwt-go"
     "mobile-backend-go/models"
@@ -11,13 +12,13 @@ import (
     "time"
 )
 
-// Определение структуры Claims для JWT токенов
+// Definition of Claims structure for JWT tokens
 type Claims struct {
-    UserID uint `json:"userID"` // Изменено на UserID
+    UserID uint `json:"userID"` // Changed to UserID
     jwt.StandardClaims
 }
 
-// Определение структур для запросов регистрации и входа
+// Definition of structures for registration and login requests
 type RegisterPayload struct {
     Username string `json:"username" binding:"required"`
     Password string `json:"password" binding:"required"`
@@ -28,7 +29,7 @@ type LoginPayload struct {
     Password string `json:"password" binding:"required"`
 }
 
-// Register создает нового пользователя
+// Register creates a new user
 // @Summary Register a new user
 // @Description Create a new user with a username and password
 // @Tags Auth
@@ -60,7 +61,7 @@ func Register(c *gin.Context) {
     c.JSON(http.StatusCreated, user)
 }
 
-// Login аутентифицирует пользователя и возвращает JWT
+// Login authenticates a user and returns a JWT
 // @Summary Login a user
 // @Description Authenticate a user and return a JWT token
 // @Tags Auth
@@ -79,20 +80,24 @@ func Login(c *gin.Context) {
 
     var user models.User
     if err := database.DB.Where("username = ?", payload.Username).First(&user).Error; err != nil {
-        c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
+        // Do not reveal information about user existence
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
         return
     }
 
     if !utils.CheckPassword(user.Password, payload.Password) {
-        c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid password"})
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
         return
     }
 
-    expirationTime := time.Now().Add(72 * time.Hour)
+    // Token is valid for 24 hours (instead of 72)
+    expirationTime := time.Now().Add(24 * time.Hour)
     claims := &Claims{
-        UserID: user.ID, // Теперь используем UserID
+        UserID: user.ID,
         StandardClaims: jwt.StandardClaims{
             ExpiresAt: expirationTime.Unix(),
+            IssuedAt:  time.Now().Unix(),
+            Subject:   fmt.Sprintf("user:%d", user.ID),
         },
     }
 
@@ -103,5 +108,8 @@ func Login(c *gin.Context) {
         return
     }
 
-    c.JSON(http.StatusOK, gin.H{"token": tokenString})
+    c.JSON(http.StatusOK, gin.H{
+        "token": tokenString,
+        "expires_at": expirationTime,
+    })
 }

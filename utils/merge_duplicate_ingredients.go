@@ -9,18 +9,18 @@ import (
 	"gorm.io/gorm"
 )
 
-// DuplicateIngredient представляет дублирующийся ингредиент
+// DuplicateIngredient represents a duplicate ingredient
 type DuplicateIngredient struct {
 	Name  string `json:"name"`
 	Count int64  `json:"count"`
 	IDs   []uint `json:"ids"`
 }
 
-// FindDuplicateIngredients находит все дублирующиеся ингредиенты
+// FindDuplicateIngredients finds all duplicate ingredients
 func FindDuplicateIngredients() ([]DuplicateIngredient, error) {
 	var duplicates []DuplicateIngredient
 
-	// Находим ингредиенты с одинаковыми именами
+	// Find ingredients with the same names
 	rows, err := database.DB.Raw(`
 		SELECT name, COUNT(*) as count, GROUP_CONCAT(id) as ids
 		FROM ingredients 
@@ -43,9 +43,9 @@ func FindDuplicateIngredients() ([]DuplicateIngredient, error) {
 			return nil, fmt.Errorf("failed to scan row: %v", err)
 		}
 
-		// Парсим ID из строки (для простоты, можно улучшить)
+		// Parse IDs from string (for simplicity, can be improved)
 		var ids []uint
-		// Здесь нужно будет парсить idsStr, но для начала создадим структуру
+		// Here we will need to parse idsStr, but for now let's create the structure
 
 		duplicates = append(duplicates, DuplicateIngredient{
 			Name:  name,
@@ -57,11 +57,11 @@ func FindDuplicateIngredients() ([]DuplicateIngredient, error) {
 	return duplicates, nil
 }
 
-// MergeDuplicateIngredients объединяет дублирующиеся ингредиенты
+// MergeDuplicateIngredients merges duplicate ingredients
 func MergeDuplicateIngredients() error {
-	log.Println("Начинаем поиск дублирующихся ингредиентов...")
+	log.Println("Starting search for duplicate ingredients...")
 
-	// Находим группы дубликатов
+	// Find duplicate groups
 	rows, err := database.DB.Raw(`
 		SELECT name
 		FROM ingredients 
@@ -84,20 +84,20 @@ func MergeDuplicateIngredients() error {
 		duplicateNames = append(duplicateNames, name)
 	}
 
-	log.Printf("Найдено %d групп дубликатов", len(duplicateNames))
+	log.Printf("Found %d duplicate groups", len(duplicateNames))
 
-	// Начинаем транзакцию
+	// Start transaction
 	tx := database.DB.Begin()
 	defer func() {
 		if r := recover(); r != nil {
 			tx.Rollback()
-			log.Printf("Откат транзакции из-за паники: %v", r)
+			log.Printf("Rollback transaction due to panic: %v", r)
 		}
 	}()
 
 	totalMerged := 0
 
-	// Обрабатываем каждую группу дубликатов
+	// Process each duplicate group
 	for _, name := range duplicateNames {
 		var ingredients []models.Ingredient
 		if err := tx.Where("name = ? AND deleted_at IS NULL", name).Find(&ingredients).Error; err != nil {
@@ -106,12 +106,12 @@ func MergeDuplicateIngredients() error {
 		}
 
 		if len(ingredients) <= 1 {
-			continue // Нет дубликатов
+			continue // No duplicates
 		}
 
-		log.Printf("Объединяем %d дубликатов для ингредиента '%s'", len(ingredients), name)
+		log.Printf("Merging %d duplicates for ingredient '%s'", len(ingredients), name)
 
-		// Берём первый ингредиент как "мастер"
+		// Take the first ingredient as "master"
 		masterIngredient := ingredients[0]
 		duplicateIDs := make([]uint, 0, len(ingredients)-1)
 
@@ -119,48 +119,48 @@ func MergeDuplicateIngredients() error {
 			duplicateIDs = append(duplicateIDs, ingredients[i].ID)
 		}
 
-		// Обновляем все связанные записи
+		// Update all related records
 		if err := mergeIngredientReferences(tx, masterIngredient.ID, duplicateIDs); err != nil {
 			tx.Rollback()
 			return fmt.Errorf("failed to merge references for %s: %v", name, err)
 		}
 
-		// Удаляем дубликаты
+		// Delete duplicates
 		if err := tx.Where("id IN ?", duplicateIDs).Delete(&models.Ingredient{}).Error; err != nil {
 			tx.Rollback()
 			return fmt.Errorf("failed to delete duplicates for %s: %v", name, err)
 		}
 
 		totalMerged += len(duplicateIDs)
-		log.Printf("Объединено %d дубликатов для '%s' в мастер ID: %d", len(duplicateIDs), name, masterIngredient.ID)
+		log.Printf("Merged %d duplicates for '%s' into master ID: %d", len(duplicateIDs), name, masterIngredient.ID)
 	}
 
-	// Коммитим транзакцию
+	// Commit transaction
 	if err := tx.Commit().Error; err != nil {
 		return fmt.Errorf("failed to commit transaction: %v", err)
 	}
 
-	log.Printf("Успешно объединено %d дублирующихся ингредиентов", totalMerged)
+	log.Printf("Successfully merged %d duplicate ingredients", totalMerged)
 	return nil
 }
 
-// mergeIngredientReferences обновляет все ссылки с дубликатов на мастер-ингредиент
+// mergeIngredientReferences updates all references from duplicates to master ingredient
 func mergeIngredientReferences(tx *gorm.DB, masterID uint, duplicateIDs []uint) error {
-	// Обновляем recipe_ingredients
+	// Update recipe_ingredients
 	if err := tx.Model(&models.RecipeIngredient{}).
 		Where("ingredient_id IN ?", duplicateIDs).
 		Update("ingredient_id", masterID).Error; err != nil {
 		return fmt.Errorf("failed to update recipe_ingredients: %v", err)
 	}
 
-	// Обновляем prices
+	// Update prices
 	if err := tx.Model(&models.Price{}).
 		Where("ingredient_id IN ?", duplicateIDs).
 		Update("ingredient_id", masterID).Error; err != nil {
 		return fmt.Errorf("failed to update prices: %v", err)
 	}
 
-	// Обновляем cooking_session_ingredients
+	// Update cooking_session_ingredients
 	if err := tx.Model(&models.CookingSessionIngredient{}).
 		Where("ingredient_id IN ?", duplicateIDs).
 		Update("ingredient_id", masterID).Error; err != nil {
@@ -170,7 +170,7 @@ func mergeIngredientReferences(tx *gorm.DB, masterID uint, duplicateIDs []uint) 
 	return nil
 }
 
-// CheckDuplicatesOnly только проверяет наличие дубликатов без изменений
+// CheckDuplicatesOnly only checks for duplicates without making changes
 func CheckDuplicatesOnly() error {
 	var result struct {
 		Count int64
@@ -192,9 +192,9 @@ func CheckDuplicatesOnly() error {
 	}
 
 	if result.Count > 0 {
-		log.Printf("⚠️  Найдено %d групп дублирующихся ингредиентов", result.Count)
+		log.Printf("⚠️  Found %d groups of duplicate ingredients", result.Count)
 
-		// Показываем детали
+		// Show details
 		rows, err := database.DB.Raw(`
 			SELECT name, COUNT(*) as count
 			FROM ingredients 
@@ -209,17 +209,17 @@ func CheckDuplicatesOnly() error {
 		}
 		defer rows.Close()
 
-		log.Println("Детали дубликатов:")
+		log.Println("Duplicate details:")
 		for rows.Next() {
 			var name string
 			var count int64
 			if err := rows.Scan(&name, &count); err != nil {
 				continue
 			}
-			log.Printf("  - '%s': %d дубликатов", name, count)
+			log.Printf("  - '%s': %d duplicates", name, count)
 		}
 	} else {
-		log.Println("✅ Дубликатов ингредиентов не найдено")
+		log.Println("✅ No duplicate ingredients found")
 	}
 
 	return nil

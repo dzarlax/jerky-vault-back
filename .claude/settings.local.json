@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__zread__get_repo_structure",
+      "Bash(go build:*)",
+      "Bash(for file in models/user.go models/recipe_ingredient.go models/product_option.go models/product_request.go models/cooking_session_ingredient.go models/order_item.go models/order.go)",
+      "Bash(do echo:*)",
+      "Bash(done)",
+      "Bash(for file in controllers/recipes.go controllers/prices.go controllers/profile.go controllers/recipe_ingredients.go controllers/cooking_sessions.go controllers/dashboard.go controllers/ingredients.go controllers/packages.go controllers/clients.go:*)"
+    ]
+  }
+}

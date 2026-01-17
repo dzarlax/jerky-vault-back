@@ -6,7 +6,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// Order представляет модель заказа
+// Order represents order model
 type Order struct {
 	ID        uint           `json:"id" gorm:"primaryKey"`
 	CreatedAt time.Time      `json:"created_at"`

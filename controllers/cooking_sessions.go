@@ -7,7 +7,7 @@ import (
     "net/http"
 )
 
-// CreateCookingSession создает новую сессию приготовления
+// CreateCookingSession creates a new cooking session
 // @Summary Create a new cooking session
 // @Description Create a new cooking session with details
 // @Tags Cooking Sessions
@@ -37,7 +37,7 @@ func CreateCookingSession(c *gin.Context) {
     c.JSON(http.StatusCreated, newSession)
 }
 
-// GetCookingSessions возвращает список всех сессий приготовления
+// GetCookingSessions returns list of all cooking sessions
 // @Summary Get list of cooking sessions
 // @Description Get all cooking sessions available for the authenticated user
 // @Tags Cooking Sessions

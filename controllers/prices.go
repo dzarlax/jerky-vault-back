@@ -9,7 +9,7 @@ import (
     "log"
 )
 
-// AddPrice добавляет новую цену
+// AddPrice adds a new price
 // @Summary Add a new price
 // @Description Add a new price for an ingredient
 // @Tags Prices
@@ -28,14 +28,14 @@ func AddPrice(c *gin.Context) {
         return
     }
 
-    // Получаем userID из контекста
+    // Get userID from context
     userID, exists := c.Get("userID")
     if !exists {
         c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
         return
     }
     newPrice.UserID = userID.(uint)
-    newPrice.Date = time.Now() // Устанавливаем текущую дату
+    newPrice.Date = time.Now() // Set current date
 
     if err := database.DB.Create(&newPrice).Error; err != nil {
         log.Printf("Failed to add price: %v", err)
@@ -46,7 +46,7 @@ func AddPrice(c *gin.Context) {
     c.JSON(http.StatusCreated, newPrice)
 }
 
-// GetPrices возвращает список всех цен
+// GetPrices returns list of all prices
 // @Summary Get list of prices
 // @Description Get all prices with optional filters
 // @Tags Prices
@@ -64,7 +64,7 @@ func GetPrices(c *gin.Context) {
     var prices []models.Price
     query := database.DB
 
-    // Получаем userID из контекста
+    // Get userID from context
     userID, exists := c.Get("userID")
     if !exists {
         c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
@@ -79,7 +79,7 @@ func GetPrices(c *gin.Context) {
     validSortColumns := map[string]bool{"price": true, "quantity": true, "date": true, "ingredient_name": true, "ingredient_type": true, "unit": true}
     validSortDirections := map[string]bool{"ASC": true, "DESC": true}
 
-    // Применение фильтров
+    // Apply filters
     query = query.Where("user_id = ?", userID)
     if ingredientID != "" {
         query = query.Where("ingredient_id = ?", ingredientID)
@@ -88,7 +88,7 @@ func GetPrices(c *gin.Context) {
         query = query.Where("DATE(date) = ?", date)
     }
 
-    // Применение сортировки
+    // Apply sorting
     if validSortColumns[sortColumn] && validSortDirections[sortDirection] {
         query = query.Order(sortColumn + " " + sortDirection)
     } else {

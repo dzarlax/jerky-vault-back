@@ -5,12 +5,12 @@ import (
     "gorm.io/gorm"
 )
 
-// User представляет модель пользователя
+// User represents user model
 type User struct {
     ID        uint           `json:"id" gorm:"primaryKey"`
     CreatedAt time.Time      `json:"created_at"`
     UpdatedAt time.Time      `json:"updated_at"`
-    DeletedAt gorm.DeletedAt `json:"deleted_at,omitempty" gorm:"index" swaggerignore:"true"` // Добавлен swaggerignore
+    DeletedAt gorm.DeletedAt `json:"deleted_at,omitempty" gorm:"index" swaggerignore:"true"` // Added swaggerignore
     Username  string         `json:"username" gorm:"unique;not null"`
     Password  string         `json:"password" gorm:"not null"`
     Recipes   []Recipe       `json:"recipes" gorm:"foreignKey:UserID"`

@@ -9,7 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// GetProducts возвращает список продуктов
+// GetProducts returns a list of products
 // @Summary Get list of products
 // @Description Get all products available
 // @Tags Products
@@ -21,14 +21,14 @@ import (
 func GetProducts(c *gin.Context) {
 	var products []models.Product
 
-	// Получаем userID из контекста
+	// Get userID from context
 	userID, exists := c.Get("userID")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
 
-	// Применяем фильтр по userID и предзагружаем опции и упаковку
+	// Apply filter by userID and preload options and package
 	if err := database.DB.
 		Preload("Options").
 		Preload("Package").
@@ -41,7 +41,7 @@ func GetProducts(c *gin.Context) {
 	c.JSON(http.StatusOK, products)
 }
 
-// GetProductByID возвращает продукт по ID
+// GetProductByID returns a product by ID
 // @Summary Get product by ID
 // @Description Get a specific product by its ID
 // @Tags Products
@@ -54,14 +54,14 @@ func GetProducts(c *gin.Context) {
 // @Failure 404 {object} map[string]string
 // @Router /api/products/{id} [get]
 func GetProductByID(c *gin.Context) {
-	// Получаем ID продукта из параметров URL
+	// Get product ID from URL parameters
 	productID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid product ID"})
 		return
 	}
 
-	// Получаем userID из контекста
+	// Get userID from context
 	userID, exists := c.Get("userID")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
@@ -70,7 +70,7 @@ func GetProductByID(c *gin.Context) {
 
 	var product models.Product
 
-	// Ищем продукт с предзагрузкой опций и упаковки
+	// Search for product with preload of options and package
 	if err := database.DB.
 		Preload("Options").
 		Preload("Package").
@@ -83,7 +83,7 @@ func GetProductByID(c *gin.Context) {
 	c.JSON(http.StatusOK, product)
 }
 
-// CreateProduct создает новый продукт
+// CreateProduct creates a new product
 // @Summary Create a new product
 // @Description Create a new product by providing necessary details, including product options
 // @Tags Products
@@ -97,36 +97,50 @@ func GetProductByID(c *gin.Context) {
 // @Router /api/products [post]
 func CreateProduct(c *gin.Context) {
 	var requestData struct {
-		Name        string  `json:"name"`
+		Name        string  `json:"name" binding:"required,min=1"`
 		Description string  `json:"description"`
-		Price       float64 `json:"price"`
-		Cost        float64 `json:"cost"`
+		Price       float64 `json:"price" binding:"required,min=0"`
+		Cost        float64 `json:"cost" binding:"min=0"`
 		Image       *string `json:"image"`
 		RecipeIDs   []uint  `json:"recipe_ids"`
-		PackageID   uint    `json:"package_id"`
+		PackageID   uint    `json:"package_id" binding:"required"`
 	}
 
-	// Считываем данные из запроса
+	// Read data from request
 	if err := c.ShouldBindJSON(&requestData); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Получаем userID из контекста
+	// Additional business rules validation
+	if requestData.Name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "name is required"})
+		return
+	}
+	if requestData.Price < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "price cannot be negative"})
+		return
+	}
+	if requestData.Cost < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "cost cannot be negative"})
+		return
+	}
+
+	// Get userID from context
 	userID, exists := c.Get("userID")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
 
-	// Проверка существования упаковки и принадлежности пользователю
+	// Check package existence and ownership
 	var existingPackage models.Package
 	if err := database.DB.Where("id = ? AND user_id = ?", requestData.PackageID, userID).First(&existingPackage).Error; err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid Package ID or package does not belong to user"})
 		return
 	}
 
-	// Создание нового продукта
+	// Create new product
 	product := models.Product{
 		Name:        requestData.Name,
 		Description: requestData.Description,
@@ -137,22 +151,22 @@ func CreateProduct(c *gin.Context) {
 		PackageID:   requestData.PackageID,
 	}
 
-	// Устанавливаем поле Image только если оно не nil
+	// Set Image field only if not nil
 	if requestData.Image != nil {
 		product.Image = *requestData.Image
 	}
 
-	// Начинаем транзакцию
+	// Start transaction
 	tx := database.DB.Begin()
 
-	// Сохраняем продукт
+	// Save product
 	if err := tx.Create(&product).Error; err != nil {
 		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create product"})
 		return
 	}
 
-	// Создание опций для рецептов продукта
+	// Creation of options for product recipes
 	var options []models.ProductOption
 	for _, recipeID := range requestData.RecipeIDs {
 		options = append(options, models.ProductOption{
@@ -162,7 +176,7 @@ func CreateProduct(c *gin.Context) {
 		})
 	}
 
-	// Сохраняем опции
+	// Save options
 	if len(options) > 0 {
 		if err := tx.Create(&options).Error; err != nil {
 			tx.Rollback()
@@ -171,10 +185,10 @@ func CreateProduct(c *gin.Context) {
 		}
 	}
 
-	// Подтверждаем транзакцию
+	// Commit transaction
 	tx.Commit()
 
-	// Загружаем полную информацию о продукте с упаковкой и опциями
+	// Load full product information with package and options
 	var createdProduct models.Product
 	if err := database.DB.
 		Preload("Options").
@@ -184,11 +198,11 @@ func CreateProduct(c *gin.Context) {
 		return
 	}
 
-	// Возвращаем созданный продукт с полной информацией
+	// Return created product with full information
 	c.JSON(http.StatusCreated, createdProduct)
 }
 
-// UpdateProduct обновляет существующий продукт
+// UpdateProduct updates an existing product
 // @Summary Update an existing product
 // @Description Update a product and its options by providing the product ID and updated data
 // @Tags Products
@@ -206,79 +220,93 @@ func CreateProduct(c *gin.Context) {
 
 func UpdateProduct(c *gin.Context) {
 	var requestData struct {
-		Name        string  `json:"name"`
+		Name        string  `json:"name" binding:"required,min=1"`
 		Description string  `json:"description"`
-		Price       float64 `json:"price"`
-		Cost        float64 `json:"cost"`
+		Price       float64 `json:"price" binding:"required,min=0"`
+		Cost        float64 `json:"cost" binding:"min=0"`
 		Image       *string `json:"image"`
 		RecipeIDs   []uint  `json:"recipe_ids"`
-		PackageID   uint    `json:"package_id"`
+		PackageID   uint    `json:"package_id" binding:"required"`
 	}
 
-	// Получаем ID продукта из параметров URL
+	// Get product ID from URL parameters
 	productID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid product ID"})
 		return
 	}
 
-	// Считываем данные из запроса
+	// Read data from request
 	if err := c.ShouldBindJSON(&requestData); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Получаем userID из контекста
+	// Additional business rules validation
+	if requestData.Name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "name is required"})
+		return
+	}
+	if requestData.Price < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "price cannot be negative"})
+		return
+	}
+	if requestData.Cost < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "cost cannot be negative"})
+		return
+	}
+
+	// Get userID from context
 	userID, exists := c.Get("userID")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
 
-	// Проверяем существование продукта
+	// Check product existence
 	var existingProduct models.Product
 	if err := database.DB.Where("id = ? AND user_id = ?", productID, userID).First(&existingProduct).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Product not found"})
 		return
 	}
 
-	// Проверка существования упаковки и принадлежности пользователю
+	// Check package existence and user ownership
 	var existingPackage models.Package
 	if err := database.DB.Where("id = ? AND user_id = ?", requestData.PackageID, userID).First(&existingPackage).Error; err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid Package ID or package does not belong to user"})
 		return
 	}
 
-	// Обновляем поля продукта
+	// Update product fields
 	existingProduct.Name = requestData.Name
 	existingProduct.Description = requestData.Description
 	existingProduct.Price = requestData.Price
 	existingProduct.Cost = requestData.Cost
 	existingProduct.PackageID = requestData.PackageID
 
-	// Устанавливаем поле Image только если оно не nil
+	// Set Image field only if it is not nil
 	if requestData.Image != nil {
 		existingProduct.Image = *requestData.Image
 	}
 
-	// Начинаем транзакцию
+	// Start transaction
 	tx := database.DB.Begin()
 
-	// Сохраняем обновленный продукт
+	// Save updated product
 	if err := tx.Save(&existingProduct).Error; err != nil {
 		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update product"})
 		return
 	}
 
-	// Удаляем старые опции продукта
+	// Delete old product options
 	if err := tx.Where("product_id = ?", existingProduct.ID).Delete(&models.ProductOption{}).Error; err != nil {
 		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete old product options"})
 		return
 	}
 
-	// Добавляем новые опции для рецептов
+	// Add new options for recipes
 	var options []models.ProductOption
 	for _, recipeID := range requestData.RecipeIDs {
 		options = append(options, models.ProductOption{
@@ -288,7 +316,7 @@ func UpdateProduct(c *gin.Context) {
 		})
 	}
 
-	// Сохраняем новые опции продукта
+	// Save new product options
 	if len(options) > 0 {
 		if err := tx.Create(&options).Error; err != nil {
 			tx.Rollback()
@@ -297,10 +325,10 @@ func UpdateProduct(c *gin.Context) {
 		}
 	}
 
-	// Подтверждаем транзакцию для опций
+	// Commit transaction for options
 	tx.Commit()
 
-	// Загружаем полную информацию об обновленном продукте с упаковкой и опциями
+	// Load full information about updated product with package and options
 	var updatedProduct models.Product
 	if err := database.DB.
 		Preload("Options").
@@ -310,11 +338,11 @@ func UpdateProduct(c *gin.Context) {
 		return
 	}
 
-	// Возвращаем обновленный продукт с полной информацией
+	// Return updated product with full information
 	c.JSON(http.StatusOK, updatedProduct)
 }
 
-// DeleteProduct удаляет существующий продукт по его ID
+// DeleteProduct deletes an existing product by its ID
 // @Summary Delete an existing product
 // @Description Delete a product by providing the product ID
 // @Tags Products
@@ -327,47 +355,47 @@ func UpdateProduct(c *gin.Context) {
 // @Failure 500 {object} map[string]string "Failed to delete product"
 // @Router /api/products/{id} [delete]
 func DeleteProduct(c *gin.Context) {
-	// Получаем ID продукта из параметров URL
+	// Get product ID from URL parameters
 	productID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid product ID"})
 		return
 	}
 
-	// Получаем userID из контекста
+	// Get userID from context
 	userID, exists := c.Get("userID")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
 
-	// Проверяем существование продукта и принадлежность пользователю
+	// Check product existence and user ownership
 	var product models.Product
 	if err := database.DB.Where("id = ? AND user_id = ?", productID, userID).First(&product).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Product not found"})
 		return
 	}
 
-	// Начинаем транзакцию для удаления продукта и связанных данных
+	// Start transaction for deleting product and related data
 	tx := database.DB.Begin()
 
-	// Удаляем связанные опции продукта
+	// Delete related product options
 	if err := tx.Where("product_id = ?", product.ID).Delete(&models.ProductOption{}).Error; err != nil {
 		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete product options"})
 		return
 	}
 
-	// Удаляем сам продукт
+	// Delete the product itself
 	if err := tx.Delete(&product).Error; err != nil {
 		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete product"})
 		return
 	}
 
-	// Подтверждаем транзакцию
+	// Commit transaction
 	tx.Commit()
 
-	// Возвращаем успешный ответ
+	// Return successful response
 	c.JSON(http.StatusOK, gin.H{"message": "Product deleted successfully"})
 }

@@ -5,7 +5,7 @@ import (
     "gorm.io/gorm"
 )
 
-// CookingSessionIngredient представляет модель ингредиентов сессии приготовления
+// CookingSessionIngredient represents cooking session ingredients model
 type CookingSessionIngredient struct {
     ID               uint             `json:"id" gorm:"primaryKey"`
     CreatedAt        time.Time        `json:"created_at"`

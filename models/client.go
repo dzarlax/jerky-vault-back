@@ -5,14 +5,14 @@ import (
     "gorm.io/gorm"
 )
 
-// Client представляет модель клиента
+// Client represents client model
 type Client struct {
     ID        uint           `json:"id" gorm:"primaryKey"`
     CreatedAt time.Time      `json:"created_at"`
     UpdatedAt time.Time      `json:"updated_at"`
-    DeletedAt gorm.DeletedAt `json:"deleted_at,omitempty" gorm:"index" swaggerignore:"true"` // Добавлен swaggerignore
-    Name      string         `json:"name" gorm:"not null"`
-    Surname   string         `json:"surname" gorm:"not null"`
+    DeletedAt gorm.DeletedAt `json:"deleted_at,omitempty" gorm:"index" swaggerignore:"true"` // Added swaggerignore
+    Name      string         `json:"name" gorm:"not null" binding:"required,min=1"`
+    Surname   string         `json:"surname" gorm:"not null" binding:"required,min=1"`
     Telegram  string         `json:"telegram"`
     Instagram string         `json:"instagram"`
     Phone     string         `json:"phone"`

@@ -1,257 +1,281 @@
 # Jerky-vault Backend
 
-## Общее описание
-Jerky-vault Backend - это REST API сервер, написанный на Go, который предоставляет backend функциональность для проекта Jerky-vault. Проект использует современный стек технологий и следует лучшим практикам разработки.
+## General Overview
+Jerky-vault Backend is a REST API server written in Go that provides backend functionality for managing jerky production recipes, ingredients, products, orders, and clients. The project uses a modern technology stack and follows best development practices.
 
-## Технический стек
-- **Язык программирования**: Go 1.23
-- **Веб-фреймворк**: Gin
-- **База данных**: PostgreSQL (с использованием GORM и pgx)
-- **Документация API**: Swagger
-- **Аутентификация**: JWT
-- **Контейнеризация**: Docker
+## Technology Stack
+- **Programming language**: Go 1.23
+- **Web framework**: Gin
+- **Database**: PostgreSQL (using GORM and pgx driver)
+- **API documentation**: Swagger
+- **Authentication**: JWT (24-hour token expiration)
+- **Containerization**: Docker
+- **Security**: Rate limiting, input validation, secure JWT handling
 
-## Структура проекта
+## Project Structure
 ```
 .
-├── controllers/     # Обработчики HTTP запросов
-├── database/       # Конфигурация и миграции базы данных
-├── docs/          # Swagger документация
-├── models/        # Модели данных
-├── routes/        # Маршрутизация API
-├── middleware/    # Промежуточное ПО
-├── utils/         # Вспомогательные функции
-├── main.go        # Точка входа приложения
-├── Dockerfile     # Конфигурация Docker
-└── docker-compose.yml.example # Пример конфигурации Docker Compose
+├── controllers/       # HTTP request handlers
+├── database/         # Database configuration and migrations
+├── docs/            # Swagger documentation
+├── middleware/      # Custom middleware (JWT, rate limiting)
+├── models/          # Data models
+├── routes/          # API routing
+├── utils/           # Utility functions
+├── constants/       # Application constants
+├── main.go          # Application entry point
+├── Dockerfile       # Docker configuration
+└── docker-compose.yaml # Docker Compose configuration
 ```
 
-## Основные зависимости
-- `github.com/gin-gonic/gin` - Веб-фреймворк
-- `github.com/gin-contrib/cors` - Middleware для CORS
-- `github.com/jackc/pgx/v5` - Драйвер PostgreSQL
-- `gorm.io/gorm` - ORM для работы с базой данных
-- `github.com/dgrijalva/jwt-go` - Работа с JWT токенами
-- `github.com/swaggo/swag` - Генерация Swagger документации
-- `github.com/joho/godotenv` - Загрузка переменных окружения
+## Main Dependencies
+- `github.com/gin-gonic/gin` - Web framework
+- `github.com/gin-contrib/cors` - CORS middleware
+- `github.com/jackc/pgx/v5` - PostgreSQL driver
+- `gorm.io/gorm` - ORM for database access
+- `github.com/dgrijalva/jwt-go` - JWT token handling
+- `github.com/swaggo/swag` - Swagger documentation generation
+- `github.com/joho/godotenv` - Environment variable loader
 
-## Конфигурация
-Проект использует следующие переменные окружения:
-- `DATABASE_URL` - URL подключения к базе данных
-- `FRONT_URL` - URL фронтенд приложения
+## Configuration
+The project uses the following environment variables:
+- `DATABASE_URL` - PostgreSQL connection string
+- `FRONT_URL` - Frontend application URL for CORS
+- `JWT_SECRET` - Secret key for JWT token signing (min 16 characters)
 
-Переменные окружения могут быть определены:
-1. Напрямую в системе
-2. В файле `.env` (который не должен быть в системе контроля версий)
+Environment variables can be defined:
+1. Directly in the system
+2. In a `.env` file (which must not be committed to version control)
 
-## API Документация
-API документация доступна через Swagger UI по адресу: `http://localhost:8080/swagger/*`
+## API Documentation
+API documentation is available via Swagger UI at: `http://localhost:8080/swagger/index.html`
 
-## API Documentation (English)
+## Features
+
+### 🔐 Security
+- **JWT Authentication**: Token-based authentication with 24-hour expiration
+- **Rate Limiting**: 60 requests/minute globally, 10 requests/minute for auth endpoints
+- **Input Validation**: Comprehensive validation for all input data
+- **JWT Secret Validation**: Server validates JWT_SECRET on startup (min 16 characters)
+- **Signing Method Protection**: Guards against "none algorithm" attacks
+
+### 🚀 Performance
+- **Database Indexes**: 18 optimized indexes for fast queries
+- **Auto-migration**: Automatic database schema updates on startup
+- **Soft Deletes**: Data is marked as deleted, not physically removed
+
+### ✅ Data Integrity
+- **Input Validation**: All requests validated before processing
+- **Transaction Support**: Multi-step operations use database transactions
+- **User Isolation**: All data automatically filtered by user ID
+
+## API Endpoints
 
 ### Authentication
-All API endpoints except `/auth/login` and `/auth/register` require authentication using JWT Bearer token.
-Include the token in the Authorization header: `Authorization: Bearer <your_token>`
+- `POST /api/auth/register` - Register new user
+- `POST /api/auth/login` - Authenticate and receive JWT token
 
-### Endpoints
+### Recipes
+- `GET /api/recipes` - Get all recipes
+- `GET /api/recipes/:id` - Get recipe by ID
+- `POST /api/recipes` - Create new recipe
+- `DELETE /api/recipes/:id` - Delete recipe
 
-#### Authentication
-- `POST /auth/register`
-  - Register a new user
-  - Request body:
-    ```json
-    {
-      "email": "string",
-      "password": "string",
-      "username": "string"
-    }
-    ```
-  - Response: JWT token and user data
+### Ingredients
+- `GET /api/ingredients` - Get all ingredients
+- `GET /api/ingredients/check` - Check if ingredient exists by name
+- `POST /api/ingredients` - Create new ingredient
 
-- `POST /auth/login`
-  - Authenticate user
-  - Request body:
-    ```json
-    {
-      "email": "string",
-      "password": "string"
-    }
-    ```
-  - Response: JWT token and user data
+### Recipe Ingredients
+- `POST /api/recipes/:id/ingredients` - Add ingredient to recipe
+- `DELETE /api/recipes/:id/ingredients/:ingredient_id` - Remove ingredient from recipe
 
-#### User Management
-- `GET /user/profile`
-  - Get current user profile
-  - Requires authentication
-  - Response: User profile data
+### Products
+- `GET /api/products` - Get all products
+- `GET /api/products/:id` - Get product by ID
+- `POST /api/products` - Create new product
+- `PUT /api/products/:id` - Update product
+- `DELETE /api/products/:id` - Delete product
 
-- `PUT /user/profile`
-  - Update user profile
-  - Requires authentication
-  - Request body:
-    ```json
-    {
-      "username": "string",
-      "email": "string"
-    }
-    ```
-  - Response: Updated user profile
+### Prices
+- `GET /api/prices` - Get ingredient prices
+- `POST /api/prices` - Add new price for ingredient
 
-#### Jerky Management
-- `GET /jerky`
-  - Get list of all jerky items
-  - Requires authentication
-  - Query parameters:
-    - `page`: Page number (default: 1)
-    - `limit`: Items per page (default: 10)
-  - Response: Paginated list of jerky items
+### Dashboard
+- `GET /api/dashboard` - Get dashboard statistics
+- `GET /api/dashboard/profit` - Get profit analysis
 
-- `POST /jerky`
-  - Create new jerky item
-  - Requires authentication
-  - Request body:
-    ```json
-    {
-      "name": "string",
-      "description": "string",
-      "type": "string",
-      "weight": "number",
-      "price": "number",
-      "expiry_date": "string (ISO date)",
-      "storage_location": "string"
-    }
-    ```
-  - Response: Created jerky item
+### Clients
+- `GET /api/clients` - Get all clients
+- `GET /api/clients/:id` - Get client by ID
+- `POST /api/clients` - Create new client
+- `PUT /api/clients/:id` - Update client
+- `DELETE /api/clients/:id` - Delete client
 
-- `GET /jerky/{id}`
-  - Get specific jerky item
-  - Requires authentication
-  - Response: Jerky item details
+### Orders
+- `GET /api/orders` - Get all orders (sorted by creation date)
+- `GET /api/orders/:id` - Get order by ID
+- `POST /api/orders` - Create new order
+- `PUT /api/orders/:id` - Update order
+- `PUT /api/orders/:id/status` - Update order status
+- `DELETE /api/orders/:id` - Delete order
 
-- `PUT /jerky/{id}`
-  - Update jerky item
-  - Requires authentication
-  - Request body: Same as POST /jerky
-  - Response: Updated jerky item
+### Packages
+- `GET /api/packages` - Get all packages
+- `POST /api/packages` - Create new package
 
-- `DELETE /jerky/{id}`
-  - Delete jerky item
-  - Requires authentication
-  - Response: Success message
+### Profile
+- `POST /api/profile/change-password` - Change user password
 
-#### Storage Management
-- `GET /storage`
-  - Get list of storage locations
-  - Requires authentication
-  - Response: List of storage locations
+## Authentication
 
-- `POST /storage`
-  - Create new storage location
-  - Requires authentication
-  - Request body:
-    ```json
-    {
-      "name": "string",
-      "description": "string",
-      "temperature": "number",
-      "humidity": "number"
-    }
-    ```
-  - Response: Created storage location
+All API endpoints except `/api/auth/register` and `/api/auth/login` require authentication using a JWT Bearer token.
 
-### Response Formats
+**Header format:** `Authorization: Bearer <your_token>`
 
-#### Success Response
+**Login Response:**
 ```json
 {
-  "status": "success",
-  "data": {
-    // Response data
-  },
-  "message": "Optional success message"
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "expires_at": "2026-01-18T14:30:00Z"
 }
 ```
 
-#### Error Response
+**Token expiration:** 24 hours
+
+## Rate Limiting
+
+The API implements rate limiting to prevent abuse:
+
+- **Global limit:** 60 requests per minute per user/IP
+- **Authentication endpoints:** 10 requests per minute per IP
+- **Headers:** `X-RateLimit-Limit` included in responses
+
+**Rate Limit Response (429 Too Many Requests):**
 ```json
 {
-  "status": "error",
-  "error": {
-    "code": "ERROR_CODE",
-    "message": "Error description"
-  }
+  "error": "Rate limit exceeded: maximum 60 requests per minute"
 }
 ```
 
-### Common Error Codes
-- `UNAUTHORIZED`: Authentication required or invalid token
-- `FORBIDDEN`: Insufficient permissions
-- `NOT_FOUND`: Resource not found
-- `VALIDATION_ERROR`: Invalid request data
-- `INTERNAL_ERROR`: Server error
+## Error Responses
 
-### Rate Limiting
-- API requests are limited to 100 requests per minute per IP
-- Rate limit headers are included in responses:
-  - `X-RateLimit-Limit`: Maximum requests per minute
-  - `X-RateLimit-Remaining`: Remaining requests
-  - `X-RateLimit-Reset`: Time until rate limit resets
+All errors are returned in the following format:
 
-### Data Types
-- All dates are in ISO 8601 format (YYYY-MM-DDTHH:mm:ssZ)
-- Numbers are represented as floats
-- Boolean values are true/false
-- Strings are UTF-8 encoded
+```json
+{
+  "error": "Error description"
+}
+```
 
-### Best Practices for Mobile Integration
-1. Implement token refresh mechanism
-2. Cache responses when appropriate
-3. Handle offline mode
-4. Implement proper error handling
-5. Use pagination for large data sets
-6. Implement proper retry logic for failed requests
-7. Monitor rate limits
-8. Implement proper data validation
-9. Use proper security measures for token storage
-10. Implement proper logging for debugging
+### Common Error Codes:
+- `400` - Bad Request (invalid request data)
+- `401` - Unauthorized (authentication required or invalid token)
+- `404` - Not Found (resource not found)
+- `429` - Too Many Requests (rate limit exceeded)
+- `500` - Internal Server Error (server error)
 
-## Запуск проекта
+## Input Validation
 
-### Локальный запуск
-1. Установите Go 1.23 или выше
-2. Скопируйте `docker-compose.yml.example` в `docker-compose.yml` и настройте его
-3. Создайте файл `.env` с необходимыми переменными окружения
-4. Запустите базу данных: `docker-compose up -d db`
-5. Запустите приложение: `go run main.go`
+The API validates all input data:
 
-### Запуск через Docker
-1. Соберите образ: `docker build -t jerky-vault-back .`
-2. Запустите контейнер: `docker-compose up`
+**Orders:**
+- `quantity` must be greater than 0
+- `price` cannot be negative
+- `cost_price` cannot be negative
+- At least one item is required
 
-## Безопасность
-- Используется JWT для аутентификации
-- Настроен CORS для защиты от межсайтовых запросов
-- Поддерживается только HTTPS в продакшене
-- Чувствительные данные хранятся в переменных окружения
+**Products:**
+- `name` is required (min 1 character)
+- `price` is required and cannot be negative
+- `cost` cannot be negative
+- `package_id` is required
 
-## Разработка
-1. Код должен соответствовать стандартам Go
-2. Все новые эндпоинты должны быть документированы через Swagger
-3. Изменения в базе данных должны быть отражены в миграциях
-4. Тесты должны быть написаны для новой функциональности
+**Clients:**
+- `name` is required (min 1 character)
+- `surname` is required (min 1 character)
 
-## Мониторинг и логирование
-- Используется стандартный логгер Go
-- Логируются все критические ошибки
-- Доступны метрики через Swagger UI
+**Recipes, Ingredients, Packages:**
+- `name` is required (min 1 character)
 
-## Деплой
-Проект может быть развернут:
-1. Нативно на сервере
-2. В Docker контейнере
-3. В облачной платформе (например, AWS, GCP, Azure)
+## Running the Project
 
-## Ограничения
-- Сервер работает на порту 8080
-- Поддерживаются только определенные методы HTTP (GET, POST, PUT, DELETE, OPTIONS)
-- CORS настроен только для определенных доменов 
+### Local Run
+1. Install Go 1.23 or higher
+2. Create a `.env` file with the required environment variables
+3. Run the application: `go run main.go`
+
+### Running with Docker
+1. Build and run with Docker Compose: `docker-compose up --build`
+2. View logs: `docker-compose logs -f`
+
+## Development
+
+### Code Quality
+1. Code must follow Go standards
+2. All comments and documentation must be in English
+3. All new endpoints must be documented via Swagger
+4. Database changes must use GORM auto-migration
+5. All user data must be filtered by `user_id`
+
+### Generating Swagger Documentation
+```bash
+swag init -g main.go
+```
+
+## Security Best Practices
+
+1. **Always validate input data** - Use binding tags and custom validation
+2. **Filter by user_id** - All queries must filter by the authenticated user's ID
+3. **Use transactions** - For multi-step database operations
+4. **Never log sensitive data** - Don't log passwords, tokens, or personal info
+5. **Validate JWT_SECRET** - Minimum 16 characters for security
+6. **Handle errors gracefully** - Return generic error messages to clients
+
+## Database Optimization
+
+The application automatically creates 18 indexes on startup for optimal query performance:
+- Orders: `user_id`, `client_id`, `status`, `created_at`, composite indexes
+- Products: `user_id`, `package_id`
+- And more...
+
+Indexes are created automatically - no manual setup required.
+
+## Limitations
+
+- The server runs on port 8080
+- JWT tokens expire after 24 hours
+- Rate limiting is in-memory (resets on server restart)
+- Soft delete is enabled on all models
+
+## Recent Improvements
+
+✅ **Security Enhancements:**
+- JWT token expiration validation
+- Signing method verification
+- JWT_SECRET validation on startup
+- Secure error messages (no user enumeration)
+
+✅ **Performance:**
+- 18 database indexes for fast queries
+- Automatic index creation on startup
+
+✅ **Data Integrity:**
+- Comprehensive input validation
+- Transaction support for multi-step operations
+- Positive quantity validation
+- Non-negative price validation
+
+✅ **API Protection:**
+- Rate limiting (60/10 requests per minute)
+- User-based and IP-based limits
+- Automatic cleanup of old rate limit data
+
+✅ **Documentation:**
+- All code comments in English
+- Updated API documentation
+- Swagger documentation
+
+## License
+
+[Add your license information here]

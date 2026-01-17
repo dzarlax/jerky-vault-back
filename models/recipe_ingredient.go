@@ -6,7 +6,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// RecipeIngredient представляет модель ингредиента рецепта
+// RecipeIngredient represents recipe ingredient model
 type RecipeIngredient struct {
 	ID             uint           `json:"id" gorm:"primaryKey"`
 	CreatedAt      time.Time      `json:"created_at"`
@@ -18,5 +18,5 @@ type RecipeIngredient struct {
 	Unit           string         `json:"unit"`
 	Recipe         Recipe         `json:"recipe" gorm:"foreignKey:RecipeID"`
 	Ingredient     Ingredient     `json:"ingredient" gorm:"foreignKey:IngredientID"`
-	CalculatedCost float64        `json:"calculated_cost" gorm:"-"` // Поле не сохраняется в базу данных
+	CalculatedCost float64        `json:"calculated_cost" gorm:"-"` // Field not persisted to database
 }

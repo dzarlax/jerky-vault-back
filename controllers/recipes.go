@@ -3,14 +3,14 @@ package controllers
 import (
 	"mobile-backend-go/database"
 	"mobile-backend-go/models"
-	"mobile-backend-go/utils" // Импортируем пакет utils
+	"mobile-backend-go/utils" // Import utils package
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
 
-// GetRecipes возвращает список всех рецептов с возможностью фильтрации по ID рецепта и ингредиента
+// GetRecipes returns list of all recipes with optional filtering by recipe ID and ingredient ID
 // @Summary Get list of recipes
 // @Description Get all recipes available for the authenticated user with optional filtering by recipe_id and ingredient_id
 // @Tags Recipes
@@ -27,7 +27,7 @@ func GetRecipes(c *gin.Context) {
 	userID := c.MustGet("userID").(uint)
 	var recipes []models.Recipe
 
-	// Фильтрация по recipe_id
+	// Filtering by recipe_id
 	recipeIDParam := c.Query("recipe_id")
 	var recipeID uint
 	if recipeIDParam != "" {
@@ -39,7 +39,7 @@ func GetRecipes(c *gin.Context) {
 		recipeID = uint(id)
 	}
 
-	// Фильтрация по ingredient_id
+	// Filtering by ingredient_id
 	ingredientIDParam := c.Query("ingredient_id")
 	var ingredientID uint
 	if ingredientIDParam != "" {
@@ -51,11 +51,11 @@ func GetRecipes(c *gin.Context) {
 		ingredientID = uint(id)
 	}
 
-	// Базовый запрос с фильтрацией по user_id
+	// Base query with filtering by user_id
 	query := database.DB.Where("user_id = ?", userID).
 		Preload("RecipeIngredients.Ingredient")
 
-	// Применение фильтров, если параметры заданы
+	// Apply filters if parameters are provided
 	if recipeID != 0 {
 		query = query.Where("recipes.id = ?", recipeID)
 	}
@@ -64,37 +64,37 @@ func GetRecipes(c *gin.Context) {
 			Where("recipe_ingredients.ingredient_id = ? and recipe_ingredients.deleted_at is NULL", ingredientID)
 	}
 
-	// Выполнение запроса
+	// Execute query
 	if err := query.Find(&recipes).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch recipes"})
 		return
 	}
 
-	// Подсчет общей стоимости для каждого рецепта
+	// Calculate total cost for each recipe
 	for i, recipe := range recipes {
 		totalCost := 0.0
 		for j, ri := range recipe.RecipeIngredients {
-			// Подгрузка последней цены для каждого ингредиента
+			// Load latest price for each ingredient
 			var latestPrice models.Price
 			if err := database.DB.Where("ingredient_id = ?", ri.IngredientID).
 				Order("date DESC").
 				Limit(1).
 				First(&latestPrice).Error; err == nil {
-				recipe.RecipeIngredients[j].Ingredient.Prices = []models.Price{latestPrice} // Присваиваем последнюю цену вручную
+				recipe.RecipeIngredients[j].Ingredient.Prices = []models.Price{latestPrice} // Assign latest price manually
 				cost, err := utils.CalculateIngredientCost(latestPrice.Price, latestPrice.Quantity, latestPrice.Unit, ri.Quantity, ri.Unit)
 				if err == nil {
-					recipes[i].RecipeIngredients[j].CalculatedCost = cost // Присваиваем рассчитанную стоимость
+					recipes[i].RecipeIngredients[j].CalculatedCost = cost // Assign calculated cost
 					totalCost += cost
 				}
 			}
 		}
-		recipes[i].TotalCost = totalCost // Добавляем total cost в ответ, но не сохраняем в базу
+		recipes[i].TotalCost = totalCost // Add total cost to response, but not save to database
 	}
 
 	c.JSON(http.StatusOK, recipes)
 }
 
-// GetRecipe возвращает один рецепт по ID
+// GetRecipe returns a single recipe by ID
 // @Summary Get a recipe
 // @Description Get a recipe by its ID for the authenticated user
 // @Tags Recipes
@@ -122,29 +122,29 @@ func GetRecipe(c *gin.Context) {
 		return
 	}
 
-	// Подсчет общей стоимости рецепта
+	// Calculate total cost of recipe
 	totalCost := 0.0
 	for j, ri := range recipe.RecipeIngredients {
-		// Подгрузка последней цены для каждого ингредиента
+		// Load latest price for each ingredient
 		var latestPrice models.Price
 		if err := database.DB.Where("ingredient_id = ?", ri.IngredientID).
 			Order("date DESC").
 			Limit(1).
 			First(&latestPrice).Error; err == nil {
-			recipe.RecipeIngredients[j].Ingredient.Prices = []models.Price{latestPrice} // Присваиваем последнюю цену вручную
+			recipe.RecipeIngredients[j].Ingredient.Prices = []models.Price{latestPrice} // Assign latest price manually
 			cost, err := utils.CalculateIngredientCost(latestPrice.Price, latestPrice.Quantity, latestPrice.Unit, ri.Quantity, ri.Unit)
 			if err == nil {
-				recipe.RecipeIngredients[j].CalculatedCost = cost // Присваиваем рассчитанную стоимость
+				recipe.RecipeIngredients[j].CalculatedCost = cost // Assign calculated cost
 				totalCost += cost
 			}
 		}
 	}
 
-	recipe.TotalCost = totalCost // Добавляем total cost в ответ, но не сохраняем в базу
+	recipe.TotalCost = totalCost // Add total cost to response, but not save to database
 	c.JSON(http.StatusOK, recipe)
 }
 
-// CreateRecipe создает новый рецепт
+// CreateRecipe creates a new recipe
 // @Summary Create a new recipe
 // @Description Create a new recipe for the authenticated user
 // @Tags Recipes
@@ -174,7 +174,7 @@ func CreateRecipe(c *gin.Context) {
 	c.JSON(http.StatusCreated, newRecipe)
 }
 
-// DeleteRecipe удаляет рецепт по ID
+// DeleteRecipe deletes a recipe by ID
 // @Summary Delete a recipe
 // @Description Delete a recipe by its ID for the authenticated user
 // @Tags Recipes

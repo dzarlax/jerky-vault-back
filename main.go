@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 	"mobile-backend-go/database"
-	_ "mobile-backend-go/docs" // Импорт для Swagger документации
+	_ "mobile-backend-go/docs" // Import for Swagger documentation
 	"mobile-backend-go/routes"
 	"os"
 
@@ -14,17 +14,17 @@ import (
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
-// loadEnvVar загружает переменную окружения, если она не установлена, пытается загрузить из .env
+// loadEnvVar loads an environment variable, if not set, tries to load from .env
 func loadEnvVar(key string) string {
-	// Сначала пытаемся получить значение переменной из окружения
+	// First try to get the variable value from environment
 	value := os.Getenv(key)
-	// Если переменной нет в окружении, пробуем загрузить из .env
+	// If variable is not in environment, try to load from .env
 	if value == "" {
-		// Загружаем .env только если значение переменной пустое
+		// Load .env only if the variable value is empty
 		if err := godotenv.Load(); err != nil {
-			log.Printf("Ошибка загрузки файла .env: %v", err)
+			log.Printf("Error loading .env file: %v", err)
 		}
-		// Повторно пытаемся получить значение после загрузки из .env
+		// Try again to get the value after loading from .env
 		value = os.Getenv(key)
 	}
 	return value
@@ -32,7 +32,7 @@ func loadEnvVar(key string) string {
 
 // @title Jerky-vault Backend API
 // @version 1.0
-// @description API проекта jerky-vault
+// @description Jerky-vault project API
 // @host localhost:8080
 // @BasePath /
 
@@ -40,40 +40,40 @@ func loadEnvVar(key string) string {
 // @in header
 // @name Authorization
 func main() {
-	// Определяем необходимые переменные окружения
+	// Define required environment variables
 	//requiredEnvVars := []string{"DB_HOST", "DB_USER", "DB_PASSWORD", "DB_NAME", "DB_PORT", "FRONT_URL"}
 	requiredEnvVars := []string{"DATABASE_URL", "FRONT_URL"}
 
-	// Проверяем наличие всех необходимых переменных окружения
+	// Check for all required environment variables
 	for _, envVar := range requiredEnvVars {
 		value := loadEnvVar(envVar)
 		if value == "" {
-			log.Fatalf("Переменная окружения %s не установлена", envVar)
+			log.Fatalf("Environment variable %s is not set", envVar)
 		}
 	}
 
-	// Подключение к базе данных и выполнение миграций
+	// Connect to database and run migrations
 	database.ConnectDatabase()
 
-	// Создание экземпляра роутера Gin
+	// Create Gin router instance
 	r := gin.Default()
 
-	// Настройка CORS
+	// Configure CORS
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{os.Getenv("FRONT_URL"), "http://localhost:3000"}, // Домен фронтенда Next.js
+		AllowOrigins:     []string{os.Getenv("FRONT_URL"), "http://localhost:3000"}, // Next.js frontend domain
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		AllowCredentials: true,
 	}))
 
-	// Маршрут для документации Swagger
+	// Route for Swagger documentation
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
-	// Настройка маршрутов API
+	// Setup API routes
 	routes.SetupRoutes(r)
 
-	// Запуск сервера на порту 8080
+	// Start server on port 8080
 	if err := r.Run(":8080"); err != nil {
-		log.Fatalf("Ошибка запуска сервера: %v", err)
+		log.Fatalf("Error starting server: %v", err)
 	}
 }

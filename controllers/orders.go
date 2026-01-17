@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"fmt"
 	"log"
 	"mobile-backend-go/constants"
 	"mobile-backend-go/database"
@@ -11,7 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// GetOrder возвращает заказ по ID
+// GetOrder returns an order by ID
 // @Summary Get an order by ID
 // @Description Fetch an order by its ID
 // @Tags Orders
@@ -47,7 +48,7 @@ func GetOrder(c *gin.Context) {
 	c.JSON(http.StatusOK, order)
 }
 
-// GetOrders возвращает список всех заказов
+// GetOrders returns a list of all orders
 // @Summary Get list of orders
 // @Description Get all orders for the authenticated user, sorted by creation date (newest first)
 // @Tags Orders
@@ -77,7 +78,7 @@ func GetOrders(c *gin.Context) {
 	c.JSON(http.StatusOK, orders)
 }
 
-// AddOrder добавляет новый заказ
+// AddOrder adds a new order
 // @Summary Add a new order
 // @Description Create a new order for the authenticated user
 // @Tags Orders
@@ -94,41 +95,61 @@ func AddOrder(c *gin.Context) {
 	userID := c.MustGet("userID").(uint)
 
 	var requestData struct {
-		ClientID uint   `json:"client_id"`
+		ClientID uint   `json:"client_id" binding:"required"`
 		Status   string `json:"status"`
 		Comment  string `json:"comment"`
 		Items    []struct {
-			ProductID uint    `json:"product_id"`
-			Quantity  int     `json:"quantity"`
-			Price     float64 `json:"price"`
-			CostPrice float64 `json:"cost_price"`
-		} `json:"items"`
+			ProductID uint    `json:"product_id" binding:"required"`
+			Quantity  int     `json:"quantity" binding:"required,min=1"`
+			Price     float64 `json:"price" binding:"required,min=0"`
+			CostPrice float64 `json:"cost_price" binding:"min=0"`
+		} `json:"items" binding:"required,min=1"`
 	}
 
-	// Считываем данные из запроса
+	// Read data from request
 	if err := c.ShouldBindJSON(&requestData); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Проверяем обязательные поля
+	// Additional business rules validation
 	if requestData.ClientID == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "client_id is required"})
 		return
 	}
 
-	if requestData.Status == "" {
-		requestData.Status = constants.OrderStatusNew // Устанавливаем статус по умолчанию
+	// Validate order items
+	for i, item := range requestData.Items {
+		if item.ProductID == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("items[%d].product_id is required", i)})
+			return
+		}
+		if item.Quantity <= 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("items[%d].quantity must be greater than 0", i)})
+			return
+		}
+		if item.Price < 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("items[%d].price cannot be negative", i)})
+			return
+		}
+		if item.CostPrice < 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("items[%d].cost_price cannot be negative", i)})
+			return
+		}
 	}
 
-	// Проверяем существование клиента и принадлежность пользователю
+	if requestData.Status == "" {
+		requestData.Status = constants.OrderStatusNew // Set default status
+	}
+
+	// Check client existence and ownership
 	var client models.Client
 	if err := database.DB.Where("id = ? AND user_id = ?", requestData.ClientID, userID).First(&client).Error; err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid client ID or client does not belong to user"})
 		return
 	}
 
-	// Создаем заказ
+	// Create order
 	newOrder := models.Order{
 		ClientID: requestData.ClientID,
 		Status:   requestData.Status,
@@ -136,10 +157,10 @@ func AddOrder(c *gin.Context) {
 		UserID:   userID,
 	}
 
-	// Начинаем транзакцию
+	// Start transaction
 	tx := database.DB.Begin()
 
-	// Сохраняем заказ
+	// Save order
 	if err := tx.Create(&newOrder).Error; err != nil {
 		tx.Rollback()
 		log.Printf("Failed to add order: %v", err)
@@ -147,10 +168,10 @@ func AddOrder(c *gin.Context) {
 		return
 	}
 
-	// Создаем элементы заказа с проверкой продуктов и автозаполнением cost_price
+	// Create order items with product validation and auto-filling cost_price
 	var orderItems []models.OrderItem
 	for _, item := range requestData.Items {
-		// Получаем продукт для проверки и получения cost
+		// Fetch product for validation and cost
 		var product models.Product
 		if err := database.DB.Where("id = ? AND user_id = ?", item.ProductID, userID).First(&product).Error; err != nil {
 			tx.Rollback()
@@ -158,10 +179,10 @@ func AddOrder(c *gin.Context) {
 			return
 		}
 
-		// Определяем cost_price: используем переданное значение или берем из продукта
-		costPrice := product.Cost // По умолчанию берем из продукта
+		// Determine cost_price: use provided value or get from product
+		costPrice := product.Cost // Default to product cost
 		if item.CostPrice != 0 {
-			costPrice = item.CostPrice // Если указано, используем переданное значение
+			costPrice = item.CostPrice // Use provided value if specified
 		}
 
 		orderItems = append(orderItems, models.OrderItem{
@@ -173,7 +194,7 @@ func AddOrder(c *gin.Context) {
 		})
 	}
 
-	// Сохраняем элементы заказа
+	// Save order items
 	if len(orderItems) > 0 {
 		if err := tx.Create(&orderItems).Error; err != nil {
 			tx.Rollback()
@@ -182,13 +203,13 @@ func AddOrder(c *gin.Context) {
 		}
 	}
 
-	// Подтверждаем транзакцию
+	// Commit transaction
 	if err := tx.Commit().Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to commit transaction"})
 		return
 	}
 
-	// Загружаем полную информацию о созданном заказе
+	// Load full order information
 	var createdOrder models.Order
 	if err := database.DB.
 		Preload("Client").
@@ -203,7 +224,7 @@ func AddOrder(c *gin.Context) {
 	c.JSON(http.StatusCreated, createdOrder)
 }
 
-// UpdateOrder обновляет заказ
+// UpdateOrder updates an order
 // @Summary Update an order
 // @Description Update an order's details
 // @Tags Orders
@@ -233,49 +254,75 @@ func UpdateOrder(c *gin.Context) {
 	}
 
 	var requestData struct {
-		ClientID uint   `json:"client_id"`
+		ClientID uint   `json:"client_id" binding:"required"`
 		Status   string `json:"status"`
 		Comment  string `json:"comment"`
 		Items    []struct {
-			ProductID uint    `json:"product_id"`
-			Quantity  int     `json:"quantity"`
-			Price     float64 `json:"price"`
-			CostPrice float64 `json:"cost_price"`
-		} `json:"items"`
+			ProductID uint    `json:"product_id" binding:"required"`
+			Quantity  int     `json:"quantity" binding:"required,min=1"`
+			Price     float64 `json:"price" binding:"required,min=0"`
+			CostPrice float64 `json:"cost_price" binding:"min=0"`
+		} `json:"items" binding:"required,min=1"`
 	}
 
-	// Считываем данные из запроса
+	// Read data from request
 	if err := c.ShouldBindJSON(&requestData); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Обновляем поля заказа
+	// Additional business rules validation
+	if requestData.ClientID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "client_id is required"})
+		return
+	}
+
+	// Validate order items
+	for i, item := range requestData.Items {
+		if item.ProductID == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("items[%d].product_id is required", i)})
+			return
+		}
+		if item.Quantity <= 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("items[%d].quantity must be greater than 0", i)})
+			return
+		}
+		if item.Price < 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("items[%d].price cannot be negative", i)})
+			return
+		}
+		if item.CostPrice < 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("items[%d].cost_price cannot be negative", i)})
+			return
+		}
+	}
+
+	// Update order fields
 	existingOrder.ClientID = requestData.ClientID
 	existingOrder.Status = requestData.Status
 	existingOrder.Comment = requestData.Comment
 
-	// Начинаем транзакцию
+	// Start transaction
 	tx := database.DB.Begin()
 
-	// Сохраняем обновленный заказ
+	// Save updated order
 	if err := tx.Save(&existingOrder).Error; err != nil {
 		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update order"})
 		return
 	}
 
-	// Удаляем старые элементы заказа
+	// Delete old order items
 	if err := tx.Where("order_id = ?", existingOrder.ID).Delete(&models.OrderItem{}).Error; err != nil {
 		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete old order items"})
 		return
 	}
 
-	// Добавляем новые элементы заказа с автозаполнением cost_price
+	// Add new order items with auto-filling cost_price
 	var newOrderItems []models.OrderItem
 	for _, item := range requestData.Items {
-		// Получаем продукт для получения cost если нужно
+		// Fetch product to get cost if needed
 		var product models.Product
 		if err := database.DB.Where("id = ? AND user_id = ?", item.ProductID, userID).First(&product).Error; err != nil {
 			tx.Rollback()
@@ -283,10 +330,10 @@ func UpdateOrder(c *gin.Context) {
 			return
 		}
 
-		// Определяем cost_price: используем переданное значение или берем из продукта
-		costPrice := product.Cost // По умолчанию берем из продукта
+		// Determine cost_price: use provided value or get from product
+		costPrice := product.Cost // Default to product cost
 		if item.CostPrice != 0 {
-			costPrice = item.CostPrice // Если указано, используем переданное значение
+			costPrice = item.CostPrice // Use provided value if specified
 		}
 
 		newOrderItems = append(newOrderItems, models.OrderItem{
@@ -298,7 +345,7 @@ func UpdateOrder(c *gin.Context) {
 		})
 	}
 
-	// Сохраняем новые элементы заказа
+	// Save new order items
 	if len(newOrderItems) > 0 {
 		if err := tx.Create(&newOrderItems).Error; err != nil {
 			tx.Rollback()
@@ -307,17 +354,17 @@ func UpdateOrder(c *gin.Context) {
 		}
 	}
 
-	// Подтверждаем транзакцию
+	// Commit transaction
 	if err := tx.Commit().Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to commit transaction"})
 		return
 	}
 
-	// Возвращаем успешный ответ
+	// Return success response
 	c.JSON(http.StatusOK, gin.H{"message": "Order updated successfully"})
 }
 
-// UpdateOrderStatus обновляет статус заказа
+// UpdateOrderStatus updates order status
 // @Summary Update order status
 // @Description Update the status of an order
 // @Tags Orders
@@ -362,7 +409,7 @@ func UpdateOrderStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Order status updated successfully"})
 }
 
-// DeleteOrder удаляет заказ
+// DeleteOrder deletes an order
 // @Summary Delete an order
 // @Description Delete an order by its ID
 // @Tags Orders

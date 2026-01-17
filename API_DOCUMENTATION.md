@@ -2,7 +2,7 @@
 
 ## Overview
 
-Jerky Vault Backend API - это RESTful API для управления рецептами, ингредиентами, продукцией, заказами и клиентами в производстве вяленого мяса.
+Jerky Vault Backend API is a RESTful API for managing recipes, ingredients, products, orders, and clients in jerky production.
 
 **Base URL:** `http://localhost:8080`
 
@@ -10,9 +10,11 @@ Jerky Vault Backend API - это RESTful API для управления рец�
 
 ## Authentication
 
-API использует JWT (JSON Web Token) для аутентификации. После успешного входа в систему вы получите токен, который необходимо включать в заголовок `Authorization` для всех защищенных эндпоинтов.
+The API uses JWT (JSON Web Token) for authentication. After successful login, you will receive a token that must be included in the `Authorization` header for all protected endpoints.
 
 **Header format:** `Authorization: Bearer <your_jwt_token>`
+
+**Token expiration:** 24 hours
 
 ---
 
@@ -48,7 +50,7 @@ API использует JWT (JSON Web Token) для аутентификаци�
 ---
 
 #### POST `/api/auth/login`
-Аутентификация пользователя.
+Authenticate user.
 
 **Request Body:**
 ```json
@@ -61,13 +63,15 @@ API использует JWT (JSON Web Token) для аутентификаци�
 **Response (200):**
 ```json
 {
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "expires_at": "2026-01-18T14:30:00Z"
 }
 ```
 
 **Errors:**
-- `401` - Неверные учетные данные
-- `400` - Неверные данные запроса
+- `401` - Invalid credentials
+- `400` - Invalid request data
+- `429` - Rate limit exceeded (max 10 requests per minute for auth endpoints)
 
 ---
 
@@ -898,7 +902,7 @@ API использует JWT (JSON Web Token) для аутентификаци�
 
 ## Error Responses
 
-Все ошибки возвращаются в следующем формате:
+All errors are returned in the following format:
 
 ```json
 {
@@ -907,11 +911,54 @@ API использует JWT (JSON Web Token) для аутентификаци�
 ```
 
 ### Common Error Codes:
-- `400` - Bad Request (неверные данные запроса)
-- `401` - Unauthorized (требуется аутентификация)
-- `403` - Forbidden (недостаточно прав)
-- `404` - Not Found (ресурс не найден)
-- `500` - Internal Server Error (внутренняя ошибка сервера)
+- `400` - Bad Request (invalid request data)
+- `401` - Unauthorized (authentication required)
+- `403` - Forbidden (insufficient permissions)
+- `404` - Not Found (resource not found)
+- `429` - Too Many Requests (rate limit exceeded)
+- `500` - Internal Server Error (server error)
+
+---
+
+## Rate Limiting
+
+The API implements rate limiting to prevent abuse:
+
+- **Global limit:** 60 requests per minute per user/IP
+- **Authentication endpoints:** 10 requests per minute per IP
+- **Headers:** Responses include `X-RateLimit-Limit` header
+
+**Rate Limit Response (429):**
+```json
+{
+  "error": "Rate limit exceeded: maximum 60 requests per minute"
+}
+```
+
+---
+
+## Input Validation
+
+The API validates all input data:
+
+**Orders:**
+- `quantity` must be greater than 0
+- `price` cannot be negative
+- `cost_price` cannot be negative
+- At least one item is required
+
+**Products:**
+- `name` is required (min 1 character)
+- `price` is required and cannot be negative
+- `cost` cannot be negative
+- `package_id` is required
+
+**Clients:**
+- `name` is required (min 1 character)
+- `surname` is required (min 1 character)
+
+**Recipes, Ingredients, Packages:**
+- `name` is required (min 1 character)
 
 ---
 
@@ -1056,17 +1103,21 @@ API использует JWT (JSON Web Token) для аутентификаци�
 - `total_profit` - чистая прибыль (выручка - себестоимость)
 - `order_count` - количество завершенных заказов
 
-**Примечания:**
-- Расчет производится только для заказов со статусом "finished"
-- Выручка: `SUM(price * quantity)` по всем позициям завершенных заказов
-- Себестоимость: `SUM(cost_price * quantity)` по всем позициям завершенных заказов
+**Notes:**
+- Calculation is performed only for orders with status "finished"
+- Revenue: `SUM(price * quantity)` for all items in finished orders
+- Cost: `SUM(cost_price * quantity)` for all items in finished orders
 
 ---
 
 ## Notes
 
-1. **Аутентификация**: Все эндпоинты кроме `/api/auth/*` требуют JWT токен
-2. **Фильтрация по пользователю**: Все данные автоматически фильтруются по ID текущего пользователя
-3. **Расчет стоимости**: Стоимость рецептов рассчитывается автоматически на основе последних цен ингредиентов
-4. **Уникальность ингредиентов**: Система предотвращает создание дубликатов ингредиентов
-5. **Soft Delete**: Модели используют soft delete (записи помечаются как удаленные, но не удаляются физически) 
+1. **Authentication**: All endpoints except `/api/auth/*` require JWT token
+2. **User Filtering**: All data is automatically filtered by current user ID
+3. **Cost Calculation**: Recipe costs are calculated automatically based on latest ingredient prices
+4. **Ingredient Uniqueness**: System prevents creation of duplicate ingredients
+5. **Soft Delete**: Models use soft delete (records are marked as deleted but not physically removed)
+6. **Rate Limiting**: API enforces rate limits to prevent abuse (60 req/min globally, 10 req/min for auth)
+7. **Input Validation**: All inputs are validated for data integrity (positive quantities, non-negative prices, required fields)
+8. **JWT Expiration**: Tokens expire after 24 hours for enhanced security
+9. **Index Optimization**: Database indexes are automatically created for optimal query performance 
