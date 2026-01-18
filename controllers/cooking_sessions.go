@@ -13,7 +13,7 @@ import (
 // @Tags Cooking Sessions
 // @Accept  json
 // @Produce  json
-// @Param session body models.CookingSession true "Cooking Session data"
+// @Param session body models.CookingSessionCreateDTO true "Cooking Session data"
 // @Success 201 {object} models.CookingSession
 // @Failure 400 {object} map[string]string "Bad request"
 // @Failure 401 {object} map[string]string "Unauthorized"
@@ -21,16 +21,29 @@ import (
 // @Router /api/cooking_sessions [post]
 func CreateCookingSession(c *gin.Context) {
     userID := c.MustGet("userID").(uint)
-    var newSession models.CookingSession
 
-    if err := c.ShouldBindJSON(&newSession); err != nil {
+    var requestData models.CookingSessionCreateDTO
+    if err := c.ShouldBindJSON(&requestData); err != nil {
         c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
         return
     }
 
-    newSession.UserID = userID
+    // Create CookingSession model from DTO
+    newSession := models.CookingSession{
+        RecipeID: requestData.RecipeID,
+        Date:     requestData.Date,
+        Yield:    requestData.Yield,
+        UserID:   userID,
+    }
+
     if err := database.DB.Create(&newSession).Error; err != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create cooking session"})
+        return
+    }
+
+    // Preload Recipe for response
+    if err := database.DB.Preload("Recipe").First(&newSession, newSession.ID).Error; err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load cooking session"})
         return
     }
 

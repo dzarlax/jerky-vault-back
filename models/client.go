@@ -5,6 +5,28 @@ import (
     "gorm.io/gorm"
 )
 
+// ClientCreateDTO represents data for creating a new client (without nested User and Orders)
+type ClientCreateDTO struct {
+    Name      string `json:"name" binding:"required,min=1"`
+    Surname   string `json:"surname" binding:"required,min=1"`
+    Telegram  string `json:"telegram"`
+    Instagram string `json:"instagram"`
+    Phone     string `json:"phone"`
+    Address   string `json:"address"`
+    Source    string `json:"source"`
+}
+
+// ClientUpdateDTO represents data for updating a client (without nested User and Orders)
+type ClientUpdateDTO struct {
+    Name      string `json:"name" binding:"required,min=1"`
+    Surname   string `json:"surname" binding:"required,min=1"`
+    Telegram  string `json:"telegram"`
+    Instagram string `json:"instagram"`
+    Phone     string `json:"phone"`
+    Address   string `json:"address"`
+    Source    string `json:"source"`
+}
+
 // Client represents client model
 type Client struct {
     ID        uint           `json:"id" gorm:"primaryKey"`

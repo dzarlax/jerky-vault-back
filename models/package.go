@@ -6,6 +6,11 @@ import (
 	"gorm.io/gorm"
 )
 
+// PackageCreateDTO represents data for creating a new package (without nested User and Products)
+type PackageCreateDTO struct {
+    Name string `json:"name" binding:"required,min=1"`
+}
+
 // Package represents packaging model
 type Package struct {
 	ID        uint           `json:"id" gorm:"primaryKey"`

@@ -5,6 +5,15 @@ import (
     "gorm.io/gorm"
 )
 
+// PriceCreateDTO represents data for creating a new price (without nested Ingredient)
+type PriceCreateDTO struct {
+    IngredientID uint    `json:"ingredient_id" binding:"required"`
+    Price        float64 `json:"price" binding:"required,min=0"`
+    Quantity     int     `json:"quantity" binding:"min=1"`
+    Unit         string  `json:"unit"`
+    Date         time.Time `json:"date"`
+}
+
 // Price represents ingredient price model
 type Price struct {
     ID           uint           `json:"id" gorm:"primaryKey"`

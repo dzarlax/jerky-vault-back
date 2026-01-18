@@ -6,6 +6,11 @@ import (
 	"gorm.io/gorm"
 )
 
+// RecipeCreateDTO represents data for creating a new recipe (without nested User)
+type RecipeCreateDTO struct {
+	Name string `json:"name" binding:"required,min=1"`
+}
+
 // Recipe represents recipe model
 type Recipe struct {
 	ID                uint               `json:"id" gorm:"primaryKey"`

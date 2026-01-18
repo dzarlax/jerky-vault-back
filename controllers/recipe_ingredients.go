@@ -18,7 +18,7 @@ import (
 // @Accept  json
 // @Produce  json
 // @Param recipe_id path int true "Recipe ID"
-// @Param ingredient body models.RecipeIngredient true "Recipe Ingredient data"
+// @Param ingredient body models.RecipeIngredientCreateDTO true "Recipe Ingredient data"
 // @Success 201 {object} models.RecipeIngredient
 // @Failure 400 {object} map[string]string "Bad request"
 // @Failure 401 {object} map[string]string "Unauthorized"
@@ -27,19 +27,17 @@ import (
 func AddIngredientToRecipe(c *gin.Context) {
 	userID := c.MustGet("userID").(uint)
 	recipeID, err := strconv.Atoi(c.Param("id"))
-	log.Println("Received recipe ID:", recipeID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid recipe ID"})
 		return
 	}
 
-	var recipeIngredient models.RecipeIngredient
-	if err := c.ShouldBindJSON(&recipeIngredient); err != nil {
+	// Use DTO to avoid nested struct validation
+	var requestData models.RecipeIngredientCreateDTO
+	if err := c.ShouldBindJSON(&requestData); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-
-	recipeIngredient.RecipeID = uint(recipeID)
 
 	// Verify recipe ownership
 	var recipe models.Recipe
@@ -48,12 +46,26 @@ func AddIngredientToRecipe(c *gin.Context) {
 		return
 	}
 
-	if err := database.DB.Create(&recipeIngredient).Error; err != nil {
+	// Create RecipeIngredient model from DTO
+	newRecipeIngredient := models.RecipeIngredient{
+		RecipeID:     uint(recipeID),
+		IngredientID: requestData.IngredientID,
+		Quantity:     requestData.Quantity,
+		Unit:         requestData.Unit,
+	}
+
+	if err := database.DB.Create(&newRecipeIngredient).Error; err != nil {
+		log.Printf("Failed to add ingredient to recipe: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add ingredient to recipe"})
 		return
 	}
 
-	c.JSON(http.StatusCreated, recipeIngredient)
+	// Preload Ingredient for response
+	if err := database.DB.Preload("Ingredient").First(&newRecipeIngredient, newRecipeIngredient.ID).Error; err != nil {
+		log.Printf("Failed to load recipe ingredient with ingredient: %v", err)
+	}
+
+	c.JSON(http.StatusCreated, newRecipeIngredient)
 }
 
 // DeleteIngredientFromRecipe deletes ingredient from recipe

@@ -69,7 +69,7 @@ func GetClients(c *gin.Context) {
 // @Security BearerAuth
 // @Accept  json
 // @Produce  json
-// @Param client body models.Client true "Client data"
+// @Param client body models.ClientCreateDTO true "Client data"
 // @Success 201 {object} models.Client
 // @Failure 400 {object} map[string]string "Bad request"
 // @Failure 401 {object} map[string]string "Unauthorized"
@@ -78,13 +78,24 @@ func GetClients(c *gin.Context) {
 func AddClient(c *gin.Context) {
     userID := c.MustGet("userID").(uint)
 
-    var newClient models.Client
-    if err := c.ShouldBindJSON(&newClient); err != nil {
+    var requestData models.ClientCreateDTO
+    if err := c.ShouldBindJSON(&requestData); err != nil {
         c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
         return
     }
 
-    newClient.UserID = userID
+    // Create Client model from DTO
+    newClient := models.Client{
+        Name:      requestData.Name,
+        Surname:   requestData.Surname,
+        Telegram:  requestData.Telegram,
+        Instagram: requestData.Instagram,
+        Phone:     requestData.Phone,
+        Address:   requestData.Address,
+        Source:    requestData.Source,
+        UserID:    userID,
+    }
+
     if err := database.DB.Create(&newClient).Error; err != nil {
         log.Printf("Failed to add client: %v", err)
         c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add client"})
@@ -102,7 +113,7 @@ func AddClient(c *gin.Context) {
 // @Accept  json
 // @Produce  json
 // @Param id path int true "Client ID"
-// @Param client body models.Client true "Client data"
+// @Param client body models.ClientUpdateDTO true "Client data"
 // @Success 200 {object} map[string]string "Client updated successfully"
 // @Failure 400 {object} map[string]string "Invalid client ID"
 // @Failure 401 {object} map[string]string "Unauthorized"
@@ -123,10 +134,20 @@ func UpdateClient(c *gin.Context) {
         return
     }
 
-    if err := c.ShouldBindJSON(&client); err != nil {
+    var requestData models.ClientUpdateDTO
+    if err := c.ShouldBindJSON(&requestData); err != nil {
         c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
         return
     }
+
+    // Update client fields from DTO
+    client.Name = requestData.Name
+    client.Surname = requestData.Surname
+    client.Telegram = requestData.Telegram
+    client.Instagram = requestData.Instagram
+    client.Phone = requestData.Phone
+    client.Address = requestData.Address
+    client.Source = requestData.Source
 
     if err := database.DB.Save(&client).Error; err != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update client"})

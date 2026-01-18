@@ -151,7 +151,7 @@ func GetRecipe(c *gin.Context) {
 // @Security BearerAuth
 // @Accept  json
 // @Produce  json
-// @Param recipe body models.Recipe true "Recipe data"
+// @Param recipe body models.RecipeCreateDTO true "Recipe data"
 // @Success 201 {object} models.Recipe
 // @Failure 400 {object} map[string]string "Bad request"
 // @Failure 401 {object} map[string]string "Unauthorized"
@@ -159,13 +159,18 @@ func GetRecipe(c *gin.Context) {
 func CreateRecipe(c *gin.Context) {
 	userID := c.MustGet("userID").(uint)
 
-	var newRecipe models.Recipe
-	if err := c.ShouldBindJSON(&newRecipe); err != nil {
+	var requestData models.RecipeCreateDTO
+	if err := c.ShouldBindJSON(&requestData); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	newRecipe.UserID = userID
+	// Create Recipe model from DTO
+	newRecipe := models.Recipe{
+		Name:   requestData.Name,
+		UserID: userID,
+	}
+
 	if err := database.DB.Create(&newRecipe).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create recipe"})
 		return

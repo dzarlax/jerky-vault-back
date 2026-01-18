@@ -36,7 +36,7 @@ func GetPackages(c *gin.Context) {
 // @Security BearerAuth
 // @Accept  json
 // @Produce  json
-// @Param package body models.Package true "Package data"
+// @Param package body models.PackageCreateDTO true "Package data"
 // @Success 201 {object} models.Package
 // @Failure 400 {object} map[string]string "Bad request"
 // @Failure 401 {object} map[string]string "Unauthorized"
@@ -45,13 +45,18 @@ func GetPackages(c *gin.Context) {
 func AddPackage(c *gin.Context) {
     userID := c.MustGet("userID").(uint)
 
-    var newPackage models.Package
-    if err := c.ShouldBindJSON(&newPackage); err != nil {
+    var requestData models.PackageCreateDTO
+    if err := c.ShouldBindJSON(&requestData); err != nil {
         c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
         return
     }
 
-    newPackage.UserID = userID
+    // Create Package model from DTO
+    newPackage := models.Package{
+        Name:   requestData.Name,
+        UserID: userID,
+    }
+
     if err := database.DB.Create(&newPackage).Error; err != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add package"})
         return

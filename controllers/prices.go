@@ -16,14 +16,14 @@ import (
 // @Security BearerAuth
 // @Accept  json
 // @Produce  json
-// @Param price body models.Price true "Price data"
+// @Param price body models.PriceCreateDTO true "Price data"
 // @Success 201 {object} models.Price
 // @Failure 400 {object} map[string]string "Bad request"
 // @Failure 500 {object} map[string]string "Internal Server Error"
 // @Router /api/prices [post]
 func AddPrice(c *gin.Context) {
-    var newPrice models.Price
-    if err := c.ShouldBindJSON(&newPrice); err != nil {
+    var requestData models.PriceCreateDTO
+    if err := c.ShouldBindJSON(&requestData); err != nil {
         c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
         return
     }
@@ -34,13 +34,31 @@ func AddPrice(c *gin.Context) {
         c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
         return
     }
-    newPrice.UserID = userID.(uint)
-    newPrice.Date = time.Now() // Set current date
+
+    // Create Price model from DTO
+    newPrice := models.Price{
+        IngredientID: requestData.IngredientID,
+        Price:        requestData.Price,
+        Quantity:     requestData.Quantity,
+        Unit:         requestData.Unit,
+        Date:         requestData.Date,
+        UserID:       userID.(uint),
+    }
+
+    // Set current date if not provided
+    if newPrice.Date.IsZero() {
+        newPrice.Date = time.Now()
+    }
 
     if err := database.DB.Create(&newPrice).Error; err != nil {
         log.Printf("Failed to add price: %v", err)
         c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add price"})
         return
+    }
+
+    // Preload Ingredient for response
+    if err := database.DB.Preload("Ingredient").First(&newPrice, newPrice.ID).Error; err != nil {
+        log.Printf("Failed to load price with ingredient: %v", err)
     }
 
     c.JSON(http.StatusCreated, newPrice)
