@@ -9,26 +9,22 @@ definitions:
     type: object
   controllers.DashboardData:
     properties:
-      pendingOrders:
+      order_type_distribution:
         items:
-          $ref: '#/definitions/controllers.PendingOrder'
+          $ref: '#/definitions/controllers.OrderTypeDistribution'
         type: array
-      topRecipes:
+      pending_orders:
+        type: integer
+      recent_orders:
         items:
-          $ref: '#/definitions/models.Recipe'
+          $ref: '#/definitions/controllers.RecentOrder'
         type: array
-      totalIngredients:
+      total_orders:
         type: integer
-      totalOrders:
+      total_products:
         type: integer
-      totalProducts:
+      total_recipes:
         type: integer
-      totalRecipes:
-        type: integer
-      typeDistribution:
-        items:
-          $ref: '#/definitions/controllers.TypeDistribution'
-        type: array
     type: object
   controllers.LoginPayload:
     properties:
@@ -40,35 +36,47 @@ definitions:
     - password
     - username
     type: object
-  controllers.PendingOrder:
+  controllers.OrderTypeDistribution:
+    properties:
+      count:
+        type: integer
+      type:
+        type: string
+    type: object
+  controllers.ProfitData:
+    properties:
+      order_count:
+        type: integer
+      total_costs:
+        type: number
+      total_profit:
+        type: number
+      total_revenue:
+        type: number
+    type: object
+  controllers.RecentOrder:
     properties:
       client_name:
         type: string
-      client_surname:
-        type: string
-      created_at:
-        type: string
       id:
         type: integer
+      order_date:
+        type: string
       status:
         type: string
+      total_amount:
+        type: number
     type: object
   controllers.RegisterPayload:
     properties:
       password:
+        minLength: 8
         type: string
       username:
         type: string
     required:
     - password
     - username
-    type: object
-  controllers.TypeDistribution:
-    properties:
-      count:
-        type: integer
-      type:
-        type: string
     type: object
   models.Client:
     properties:
@@ -81,6 +89,7 @@ definitions:
       instagram:
         type: string
       name:
+        minLength: 1
         type: string
       orders:
         items:
@@ -91,6 +100,7 @@ definitions:
       source:
         type: string
       surname:
+        minLength: 1
         type: string
       telegram:
         type: string
@@ -100,6 +110,53 @@ definitions:
         $ref: '#/definitions/models.User'
       user_id:
         type: integer
+    required:
+    - name
+    - surname
+    type: object
+  models.ClientCreateDTO:
+    properties:
+      address:
+        type: string
+      instagram:
+        type: string
+      name:
+        minLength: 1
+        type: string
+      phone:
+        type: string
+      source:
+        type: string
+      surname:
+        minLength: 1
+        type: string
+      telegram:
+        type: string
+    required:
+    - name
+    - surname
+    type: object
+  models.ClientUpdateDTO:
+    properties:
+      address:
+        type: string
+      instagram:
+        type: string
+      name:
+        minLength: 1
+        type: string
+      phone:
+        type: string
+      source:
+        type: string
+      surname:
+        minLength: 1
+        type: string
+      telegram:
+        type: string
+    required:
+    - name
+    - surname
     type: object
   models.CookingSession:
     properties:
@@ -124,7 +181,26 @@ definitions:
       user_id:
         type: integer
       yield:
+        minLength: 1
         type: string
+    required:
+    - date
+    - recipe_id
+    - yield
+    type: object
+  models.CookingSessionCreateDTO:
+    properties:
+      date:
+        type: string
+      recipe_id:
+        type: integer
+      yield:
+        minLength: 1
+        type: string
+    required:
+    - date
+    - recipe_id
+    - yield
     type: object
   models.CookingSessionIngredient:
     properties:
@@ -160,6 +236,7 @@ definitions:
       id:
         type: integer
       name:
+        minLength: 1
         type: string
       prices:
         items:
@@ -170,9 +247,13 @@ definitions:
           $ref: '#/definitions/models.RecipeIngredient'
         type: array
       type:
+        minLength: 1
         type: string
       updated_at:
         type: string
+    required:
+    - name
+    - type
     type: object
   models.Order:
     properties:
@@ -180,6 +261,8 @@ definitions:
         $ref: '#/definitions/models.Client'
       client_id:
         type: integer
+      comment:
+        type: string
       created_at:
         type: string
       id:
@@ -227,9 +310,10 @@ definitions:
       id:
         type: integer
       name:
+        minLength: 1
         type: string
       products:
-        description: Если Package связан с Product через PackageID
+        description: If Package is related to Product through PackageID
         items:
           $ref: '#/definitions/models.Product'
         type: array
@@ -239,6 +323,16 @@ definitions:
         $ref: '#/definitions/models.User'
       user_id:
         type: integer
+    required:
+    - name
+    type: object
+  models.PackageCreateDTO:
+    properties:
+      name:
+        minLength: 1
+        type: string
+    required:
+    - name
     type: object
   models.Price:
     properties:
@@ -253,8 +347,10 @@ definitions:
       ingredient_id:
         type: integer
       price:
+        minimum: 0
         type: number
       quantity:
+        minimum: 1
         type: integer
       unit:
         type: string
@@ -264,10 +360,33 @@ definitions:
         $ref: '#/definitions/models.User'
       user_id:
         type: integer
+    required:
+    - date
+    - ingredient_id
+    - price
+    type: object
+  models.PriceCreateDTO:
+    properties:
+      date:
+        type: string
+      ingredient_id:
+        type: integer
+      price:
+        minimum: 0
+        type: number
+      quantity:
+        minimum: 1
+        type: integer
+      unit:
+        type: string
+    required:
+    - ingredient_id
+    - price
     type: object
   models.Product:
     properties:
       cost:
+        minimum: 0
         type: number
       created_at:
         type: string
@@ -278,6 +397,7 @@ definitions:
       image:
         type: string
       name:
+        minLength: 1
         type: string
       options:
         items:
@@ -286,11 +406,12 @@ definitions:
       package:
         allOf:
         - $ref: '#/definitions/models.Package'
-        description: Добавьте это поле, если необходимо загружать данные об упаковке
+        description: Add this field if you need to load package data
       package_id:
-        description: Добавьте это поле
+        description: Add this field
         type: integer
       price:
+        minimum: 0
         type: number
       updated_at:
         type: string
@@ -298,6 +419,9 @@ definitions:
         $ref: '#/definitions/models.User'
       user_id:
         type: integer
+    required:
+    - name
+    - price
     type: object
   models.ProductOption:
     properties:
@@ -340,6 +464,7 @@ definitions:
       id:
         type: integer
       name:
+        minLength: 1
         type: string
       product_options:
         items:
@@ -350,7 +475,7 @@ definitions:
           $ref: '#/definitions/models.RecipeIngredient'
         type: array
       total_cost:
-        description: Поле не сохраняется в базу данных
+        description: Field not persisted to database
         type: number
       updated_at:
         type: string
@@ -358,9 +483,22 @@ definitions:
         $ref: '#/definitions/models.User'
       user_id:
         type: integer
+    required:
+    - name
+    type: object
+  models.RecipeCreateDTO:
+    properties:
+      name:
+        minLength: 1
+        type: string
+    required:
+    - name
     type: object
   models.RecipeIngredient:
     properties:
+      calculated_cost:
+        description: Field not persisted to database
+        type: number
       created_at:
         type: string
       id:
@@ -380,6 +518,18 @@ definitions:
       updated_at:
         type: string
     type: object
+  models.RecipeIngredientCreateDTO:
+    properties:
+      ingredient_id:
+        type: integer
+      quantity:
+        type: string
+      unit:
+        type: string
+    required:
+    - ingredient_id
+    - quantity
+    type: object
   models.User:
     properties:
       clients:
@@ -398,8 +548,6 @@ definitions:
         items:
           $ref: '#/definitions/models.Package'
         type: array
-      password:
-        type: string
       prices:
         items:
           $ref: '#/definitions/models.Price'
@@ -420,8 +568,8 @@ definitions:
 host: localhost:8080
 info:
   contact: {}
-  description: API проекта jerky-vault
-  title: Jerky-vault Backend API
+  description: BatchVault API for small food production management
+  title: BatchVault Backend API
   version: "1.0"
 paths:
   /api/auth/login:
@@ -521,7 +669,7 @@ paths:
         name: client
         required: true
         schema:
-          $ref: '#/definitions/models.Client'
+          $ref: '#/definitions/models.ClientCreateDTO'
       produces:
       - application/json
       responses:
@@ -656,7 +804,7 @@ paths:
         name: client
         required: true
         schema:
-          $ref: '#/definitions/models.Client'
+          $ref: '#/definitions/models.ClientUpdateDTO'
       produces:
       - application/json
       responses:
@@ -734,7 +882,7 @@ paths:
         name: session
         required: true
         schema:
-          $ref: '#/definitions/models.CookingSession'
+          $ref: '#/definitions/models.CookingSessionCreateDTO'
       produces:
       - application/json
       responses:
@@ -790,6 +938,33 @@ paths:
       summary: Get dashboard data
       tags:
       - Dashboard
+  /api/dashboard/profit:
+    get:
+      description: Fetch profit statistics for completed orders
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controllers.ProfitData'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get profit data
+      tags:
+      - Dashboard
   /api/ingredients:
     get:
       description: Get all ingredients
@@ -837,6 +1012,12 @@ paths:
             additionalProperties:
               type: string
             type: object
+        "409":
+          description: Ingredient already exists
+          schema:
+            additionalProperties:
+              type: string
+            type: object
         "500":
           description: Internal Server Error
           schema:
@@ -848,9 +1029,38 @@ paths:
       summary: Create a new ingredient
       tags:
       - Ingredients
+  /api/ingredients/check:
+    get:
+      description: Check if an ingredient with the given name already exists
+      parameters:
+      - description: Ingredient name to check
+        in: query
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Check result
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Check if ingredient exists
+      tags:
+      - Ingredients
   /api/orders:
     get:
-      description: Get all orders for the authenticated user
+      description: Get all orders for the authenticated user, sorted by creation date
+        (newest first)
       produces:
       - application/json
       responses:
@@ -887,7 +1097,7 @@ paths:
         name: order
         required: true
         schema:
-          $ref: '#/definitions/models.Order'
+          type: object
       produces:
       - application/json
       responses:
@@ -1157,7 +1367,7 @@ paths:
         name: package
         required: true
         schema:
-          $ref: '#/definitions/models.Package'
+          $ref: '#/definitions/models.PackageCreateDTO'
       produces:
       - application/json
       responses:
@@ -1244,7 +1454,7 @@ paths:
         name: price
         required: true
         schema:
-          $ref: '#/definitions/models.Price'
+          $ref: '#/definitions/models.PriceCreateDTO'
       produces:
       - application/json
       responses:
@@ -1373,6 +1583,44 @@ paths:
       summary: Delete an existing product
       tags:
       - Products
+    get:
+      description: Get a specific product by its ID
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Product'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get product by ID
+      tags:
+      - Products
   /api/profile/change-password:
     post:
       consumes:
@@ -1480,7 +1728,7 @@ paths:
         name: recipe
         required: true
         schema:
-          $ref: '#/definitions/models.Recipe'
+          $ref: '#/definitions/models.RecipeCreateDTO'
       produces:
       - application/json
       responses:
@@ -1598,7 +1846,7 @@ paths:
         name: ingredient
         required: true
         schema:
-          $ref: '#/definitions/models.RecipeIngredient'
+          $ref: '#/definitions/models.RecipeIngredientCreateDTO'
       produces:
       - application/json
       responses:
