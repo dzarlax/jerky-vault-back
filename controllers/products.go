@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"fmt"
 	"mobile-backend-go/database"
 	"mobile-backend-go/models"
 	"net/http"
@@ -8,6 +9,37 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+func validateRecipeOwnership(recipeIDs []uint, userID uint) error {
+	if len(recipeIDs) == 0 {
+		return nil
+	}
+
+	uniqueRecipeIDs := make(map[uint]struct{}, len(recipeIDs))
+	for _, recipeID := range recipeIDs {
+		if recipeID == 0 {
+			return fmt.Errorf("recipe_ids cannot contain 0")
+		}
+		uniqueRecipeIDs[recipeID] = struct{}{}
+	}
+
+	ids := make([]uint, 0, len(uniqueRecipeIDs))
+	for recipeID := range uniqueRecipeIDs {
+		ids = append(ids, recipeID)
+	}
+
+	var count int64
+	if err := database.DB.Model(&models.Recipe{}).
+		Where("user_id = ? AND id IN ?", userID, ids).
+		Count(&count).Error; err != nil {
+		return err
+	}
+	if count != int64(len(ids)) {
+		return fmt.Errorf("invalid recipe ID or recipe does not belong to user")
+	}
+
+	return nil
+}
 
 // GetProducts returns a list of products
 // @Summary Get list of products
@@ -139,6 +171,10 @@ func CreateProduct(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid Package ID or package does not belong to user"})
 		return
 	}
+	if err := validateRecipeOwnership(requestData.RecipeIDs, userID.(uint)); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
 	// Create new product
 	product := models.Product{
@@ -186,7 +222,10 @@ func CreateProduct(c *gin.Context) {
 	}
 
 	// Commit transaction
-	tx.Commit()
+	if err := tx.Commit().Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to commit transaction"})
+		return
+	}
 
 	// Load full product information with package and options
 	var createdProduct models.Product
@@ -276,6 +315,10 @@ func UpdateProduct(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid Package ID or package does not belong to user"})
 		return
 	}
+	if err := validateRecipeOwnership(requestData.RecipeIDs, userID.(uint)); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
 	// Update product fields
 	existingProduct.Name = requestData.Name
@@ -326,7 +369,10 @@ func UpdateProduct(c *gin.Context) {
 	}
 
 	// Commit transaction for options
-	tx.Commit()
+	if err := tx.Commit().Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to commit transaction"})
+		return
+	}
 
 	// Load full information about updated product with package and options
 	var updatedProduct models.Product
@@ -394,7 +440,10 @@ func DeleteProduct(c *gin.Context) {
 	}
 
 	// Commit transaction
-	tx.Commit()
+	if err := tx.Commit().Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to commit transaction"})
+		return
+	}
 
 	// Return successful response
 	c.JSON(http.StatusOK, gin.H{"message": "Product deleted successfully"})

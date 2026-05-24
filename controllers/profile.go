@@ -38,7 +38,7 @@ func ChangePassword(c *gin.Context) {
 		return
 	}
 
-	if len(payload.NewPassword) < 3 {
+	if len(payload.NewPassword) < 8 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Password must be at least 8 characters long"})
 		return
 	}

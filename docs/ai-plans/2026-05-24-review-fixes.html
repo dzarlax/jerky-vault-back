@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Implementation Plan: Review Fixes</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f6f7f9;
+      color: #1f2937;
+      line-height: 1.5;
+    }
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 32px;
+    }
+    section {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 16px 0;
+    }
+    h1, h2, h3 {
+      line-height: 1.2;
+    }
+    h1 {
+      margin-bottom: 8px;
+    }
+    code {
+      background: #f3f4f6;
+      padding: 2px 5px;
+      border-radius: 4px;
+    }
+    ul, ol {
+      padding-left: 24px;
+    }
+    li {
+      margin: 6px 0;
+    }
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: #e5e7eb;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .note {
+      border-left: 4px solid #2563eb;
+    }
+    .risk {
+      border-left: 4px solid #dc2626;
+    }
+    .approval {
+      border-left: 4px solid #d97706;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 12px;
+    }
+    .mini {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 12px;
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Implementation Plan: Review Fixes</h1>
+  <p class="badge">Approval required before implementation</p>
+
+  <section>
+    <h2>Task Summary</h2>
+    <p>
+      Fix the code review findings from the backend review, excluding cooking session routing because
+      that feature is intentionally hidden until the product flow is redesigned.
+    </p>
+  </section>
+
+  <section class="note">
+    <h2>Explicit Scope</h2>
+    <ul>
+      <li>In scope: auth response hardening, JWT env loading, ownership checks, user-scoped price lookup, status update semantics, password policy mismatch, and dependency/runtime vulnerability cleanup.</li>
+      <li>In scope: compatibility verification against the neighboring web frontend <code>D:\Projects\Code\Personal\jerky-vault</code> and mobile app <code>D:\Projects\Code\Personal\Jerky-Vault-mob</code>.</li>
+      <li>Out of scope: enabling or changing <code>cooking_sessions</code> routes or behavior.</li>
+      <li>Out of scope unless discovered as necessary: schema migrations, new product behavior, deployment to VPS, and frontend changes.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Current Behavior</h2>
+    <div class="grid">
+      <div class="mini">
+        <h3>Auth</h3>
+        <p><code>Register</code> returns <code>models.User</code>, and <code>models.User.Password</code> is serialized as <code>password</code>.</p>
+      </div>
+      <div class="mini">
+        <h3>Env Loading</h3>
+        <p><code>middleware/auth.go</code> validates <code>JWT_SECRET</code> in package <code>init()</code>, before <code>main.go</code> loads <code>.env</code>.</p>
+      </div>
+      <div class="mini">
+        <h3>Ownership</h3>
+        <p><code>UpdateOrder</code> accepts a new <code>client_id</code> without validating ownership. Product recipe options accept raw <code>recipe_ids</code>.</p>
+      </div>
+      <div class="mini">
+        <h3>Recipe Cost</h3>
+        <p>Recipe cost lookup loads latest price by <code>ingredient_id</code> only, ignoring the authenticated user.</p>
+      </div>
+      <div class="mini">
+        <h3>Status Updates</h3>
+        <p><code>UpdateOrderStatus</code> does not inspect <code>RowsAffected</code>, so a no-op update can still return 200.</p>
+      </div>
+      <div class="mini">
+        <h3>Dependencies</h3>
+        <p><code>govulncheck</code> reported reachable vulnerabilities in the Go standard library path and <code>golang.org/x/net@v0.29.0</code>.</p>
+      </div>
+      <div class="mini">
+        <h3>Web Auth Client</h3>
+        <p><code>jerky-vault/src/pages/auth/signin.tsx</code> only requires <code>token</code> from login and falls back to <code>{ username }</code> when <code>data.user</code> is missing.</p>
+      </div>
+      <div class="mini">
+        <h3>Mobile Auth Client</h3>
+        <p><code>Jerky Vault/APIService.swift</code> decodes login as <code>LoginResponse { token }</code>; register decodes <code>User</code>, where <code>password</code> is already optional.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Neighbor App Compatibility Notes</h2>
+    <ul>
+      <li>Web login: <code>D:\Projects\Code\Personal\jerky-vault\src\pages\auth\signin.tsx</code> calls <code>/api/auth/login</code> through the shared fetcher and requires only <code>data.token</code>. Removing password from user responses should not break login.</li>
+      <li>Web stored user: <code>D:\Projects\Code\Personal\jerky-vault\src\utils\authContext.tsx</code> persists whatever user object login passes; current login already passes <code>{ username }</code> if no user is returned.</li>
+      <li>Web signup: <code>D:\Projects\Code\Personal\jerky-vault\src\pages\auth\signup.tsx</code> currently posts to <code>/api/auth/signup</code> with plain <code>fetch</code>, while backend exposes <code>/api/auth/register</code>. This appears to be an existing mismatch, separate from hiding password hashes.</li>
+      <li>Web password change: <code>D:\Projects\Code\Personal\jerky-vault\src\pages\profile.tsx</code> currently enforces minimum 3 characters, and locale text says "Minimum 3 characters". If backend moves to 8, the frontend should be updated in the same pass or the backend should keep 3 intentionally.</li>
+      <li>Mobile login: <code>D:\Projects\Code\Personal\Jerky-Vault-mob\Jerky Vault\APIService.swift</code> expects login JSON with <code>token</code> only.</li>
+      <li>Mobile register: <code>D:\Projects\Code\Personal\Jerky-Vault-mob\Jerky Vault\Models.swift</code> has <code>User.password: String?</code>, so removing the field from backend register response should decode successfully.</li>
+      <li>Mobile statuses: <code>D:\Projects\Code\Personal\Jerky-Vault-mob\Jerky Vault\Models.swift</code> already defines the same order statuses as backend constants: <code>new</code>, <code>in_progress</code>, <code>ready</code>, <code>finished</code>, <code>canceled</code>.</li>
+      <li>Mobile repo note: <code>D:\Projects\Code\Personal\Jerky-Vault-mob</code> has an existing untracked <code>.gitignore</code>; do not modify or stage it as part of this backend fix.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Desired Behavior</h2>
+    <ul>
+      <li>Registration returns only safe public user fields, never password hashes.</li>
+      <li><code>JWT_SECRET</code> is validated after normal environment loading, including local <code>.env</code> loading.</li>
+      <li>All cross-resource references that should be user-owned are validated before writes.</li>
+      <li>Recipe cost calculations use the authenticated user's price history only.</li>
+      <li>Status update returns 404 when no authenticated user's order was updated.</li>
+      <li>Password minimum length logic matches the returned message.</li>
+      <li>Dependency/runtime updates remove reachable <code>govulncheck</code> findings where possible.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Files Likely to Change</h2>
+    <ul>
+      <li><code>controllers/auth.go</code> - return a safe auth/user DTO from registration.</li>
+      <li><code>models/user.go</code> - hide <code>Password</code> from JSON or add public DTOs; exact choice depends on smallest safe change.</li>
+      <li><code>middleware/auth.go</code> and <code>main.go</code> - move JWT secret validation out of package init and include <code>JWT_SECRET</code> in required env validation.</li>
+      <li><code>controllers/orders.go</code> - validate updated client ownership, validate status values, and check update row count.</li>
+      <li><code>controllers/products.go</code> - validate every <code>recipe_id</code> belongs to the authenticated user before creating options.</li>
+      <li><code>controllers/recipes.go</code> - filter latest price lookup by <code>user_id</code>.</li>
+      <li><code>controllers/prices.go</code> and <code>controllers/recipe_ingredients.go</code> - likely validate ingredient existence and tighten user-owned write assumptions where relevant.</li>
+      <li><code>controllers/profile.go</code> - align password minimum length check with message.</li>
+      <li><code>go.mod</code> and <code>go.sum</code> - update affected dependencies.</li>
+      <li><code>Dockerfile</code> - pin/update Go builder image to a non-vulnerable patch version if available locally/remotely.</li>
+      <li><code>D:\Projects\Code\Personal\jerky-vault\src\pages\auth\signup.tsx</code> - optional compatibility fix if signup is expected to work from the web app in this pass.</li>
+      <li><code>D:\Projects\Code\Personal\jerky-vault\src\pages\profile.tsx</code> and <code>D:\Projects\Code\Personal\jerky-vault\locales\*\common.json</code> - optional sync if backend password minimum changes to 8.</li>
+      <li><code>docs/ai-plans/2026-05-24-review-fixes.html</code> - update after implementation with actual changes and checks.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Implementation Steps</h2>
+    <ol>
+      <li>Introduce or reuse safe response structs for user/auth responses; stop serializing password hashes.</li>
+      <li>Refactor JWT secret validation into an exported middleware function or app startup helper called after required env loading.</li>
+      <li>Add a small status validation helper for order statuses and apply it in create/update/status endpoints.</li>
+      <li>Add ownership validation for <code>UpdateOrder</code> <code>client_id</code>.</li>
+      <li>Add product option validation: reject missing or foreign recipe ids before saving product/options.</li>
+      <li>Update recipe cost price queries to include <code>user_id = ?</code>.</li>
+      <li>Make <code>UpdateOrderStatus</code> check <code>RowsAffected</code> and return 404 on no match.</li>
+      <li>Align password policy to at least 8 characters, unless the user asks for another threshold.</li>
+      <li>Before or during implementation, decide whether to include the web signup endpoint mismatch and frontend password-minimum copy in scope.</li>
+      <li>Update direct vulnerable modules and Go builder/runtime references, then rerun vulnerability checks.</li>
+      <li>Add focused tests for auth serialization, ownership checks, recipe price scoping, and order status update semantics if the current code structure allows practical handler tests without a large harness.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>API, Auth, and Data Impact</h2>
+    <ul>
+      <li>API response shape for <code>POST /api/auth/register</code> will change by removing <code>password</code>.</li>
+      <li>Verified web and mobile login flows do not require a user object from login beyond the token. Mobile register should tolerate missing <code>password</code> because the field is optional.</li>
+      <li>Web signup may currently be broken independently because it calls <code>/api/auth/signup</code> instead of backend <code>/api/auth/register</code>.</li>
+      <li>Invalid or cross-user resource references will return 400 or 404 instead of creating inconsistent rows.</li>
+      <li>Invalid order statuses should return 400 rather than being persisted as arbitrary strings.</li>
+      <li>No planned database schema changes. Existing bad data, if present, will not be automatically repaired in this task.</li>
+      <li>Deployment image build may change if the Docker Go version is pinned to a newer patch.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Test Plan</h2>
+    <ul>
+      <li><code>go test ./...</code></li>
+      <li><code>go vet ./...</code></li>
+      <li><code>go build ./...</code></li>
+      <li><code>go run golang.org/x/vuln/cmd/govulncheck@latest ./...</code></li>
+      <li><code>go list -m -u all</code> to confirm important dependency drift after updates.</li>
+      <li>If tests are added: include handler-level tests for rejected cross-user client/recipe ids and no password in register response.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Manual QA Checklist</h2>
+    <ul>
+      <li>Register a user and confirm the JSON response contains no <code>password</code> field.</li>
+      <li>Run or manually inspect web signin after backend changes; expected behavior is token-only login still works.</li>
+      <li>Run or manually inspect mobile signin/register decoding; expected behavior is login token still decodes and register tolerates no <code>password</code> field.</li>
+      <li>Run locally with values loaded from <code>.env</code> and confirm <code>JWT_SECRET</code> validation works after env loading.</li>
+      <li>Try updating an order to a foreign or nonexistent <code>client_id</code>; expect rejection.</li>
+      <li>Try creating/updating product options with a foreign or nonexistent <code>recipe_id</code>; expect rejection.</li>
+      <li>Try updating status for a nonexistent order id; expect 404.</li>
+      <li>Confirm valid order create/update/status flows still work with known statuses.</li>
+    </ul>
+  </section>
+
+  <section class="risk">
+    <h2>Risks and Edge Cases</h2>
+    <ul>
+      <li>Changing register response is low risk for the inspected clients: mobile <code>User.password</code> is optional and web login does not depend on register response. Any uninspected client could still depend on the old field.</li>
+      <li>Fixing password minimum to 8 in backend without updating the web profile form would create a client/server validation mismatch because the web app currently says 3 characters.</li>
+      <li>Fixing web signup endpoint may touch the neighboring frontend repo, which should be treated as a separate working tree with its own status and validation.</li>
+      <li>Status validation can reject legacy arbitrary statuses if they exist in the database or UI.</li>
+      <li>Dependency updates may require small code adjustments, especially around Gin/GORM transitive dependencies.</li>
+      <li>Docker builder patch availability depends on upstream image tags at implementation time.</li>
+      <li>Tests may need a lightweight test DB strategy; if the project has no established test DB harness, keep test scope focused and document gaps.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Rollback Plan</h2>
+    <p>
+      Keep changes in a normal git diff. If a dependency update breaks build or runtime behavior, revert the dependency-related hunks first
+      while keeping isolated security and validation fixes if they pass. If API response changes break the frontend, temporarily preserve
+      backward-compatible safe fields, but never restore password hash serialization.
+    </p>
+  </section>
+
+  <section>
+    <h2>Resolved Questions</h2>
+    <ul>
+      <li>Invalid order statuses are rejected everywhere this pass touched order writes: create, full update, and status-only update.</li>
+      <li>Ingredients remain global shared entities for now. This pass only validates that referenced ingredient ids exist before creating prices or recipe ingredients.</li>
+      <li>Password minimum is exactly 8 characters. Backend register, backend password change, web profile validation, web signup validation, and locale copy were aligned.</li>
+      <li>Neighboring web frontend fixes were included after first updating the frontend repository from Git.</li>
+      <li>Dependency updates were security-focused: Go runtime/toolchain, Docker builder, JWT library replacement, and the reachable vulnerable <code>x/net</code> path were addressed.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Implementation Notes</h2>
+    <ul>
+      <li>Implemented on 2026-05-24 after approval.</li>
+      <li>Backend no longer serializes <code>models.User.Password</code> in JSON responses.</li>
+      <li>JWT validation now happens after env loading, and auth moved from <code>github.com/dgrijalva/jwt-go</code> to <code>github.com/golang-jwt/jwt/v5</code>.</li>
+      <li>Go runtime was raised to <code>1.25.10</code>; Docker builder now uses <code>golang:1.25.10-alpine</code>.</li>
+      <li>Order status validation is enforced on create, full update, and status-only update using the backend constants.</li>
+      <li><code>UpdateOrder</code> now validates the replacement <code>client_id</code> belongs to the authenticated user.</li>
+      <li>Product create/update now validates every referenced <code>recipe_id</code> belongs to the authenticated user.</li>
+      <li>Recipe cost calculations now load latest prices scoped by both <code>ingredient_id</code> and <code>user_id</code>.</li>
+      <li>Price and recipe-ingredient writes now reject nonexistent ingredient ids before creating rows.</li>
+      <li>Web frontend was first updated from Git to <code>ff6c095</code>, then signup was changed to call <code>/api/auth/register</code> through the shared fetcher.</li>
+      <li>Web password minimum validation and locale copy now use 8 characters to match the backend.</li>
+      <li>A pulled frontend JSX grouping typo in <code>src/pages/clients.tsx</code> was fixed because it blocked <code>npm run lint</code>.</li>
+      <li>Cooking session routes remain unchanged and intentionally hidden.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Verification Results</h2>
+    <ul>
+      <li><code>go test ./...</code> passed.</li>
+      <li><code>go vet ./...</code> passed.</li>
+      <li><code>go build ./...</code> passed.</li>
+      <li><code>go run golang.org/x/vuln/cmd/govulncheck@latest ./...</code> passed with 0 reachable vulnerabilities.</li>
+      <li><code>docker build -t jerky-vault-back:review-fixes .</code> passed.</li>
+      <li><code>npm ci</code> in the frontend passed, with npm reporting existing dependency audit findings.</li>
+      <li><code>npm run lint</code> in the frontend passed after fixing the pulled <code>clients.tsx</code> syntax issue.</li>
+      <li><code>npm run build</code> in the frontend passed.</li>
+    </ul>
+  </section>
+
+  <section class="approval">
+    <h2>Approval Gate</h2>
+    <p>
+      Implementation was started after the user explicitly approved this plan.
+      The intentionally hidden <code>cooking_sessions</code> routes will not be enabled as part of this work.
+    </p>
+  </section>
+</main>
+</body>
+</html>

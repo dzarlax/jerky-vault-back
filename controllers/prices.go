@@ -1,12 +1,12 @@
 package controllers
 
 import (
-    "github.com/gin-gonic/gin"
-    "mobile-backend-go/models"
-    "mobile-backend-go/database"
-    "net/http"
-    "time"
-    "log"
+	"github.com/gin-gonic/gin"
+	"log"
+	"mobile-backend-go/database"
+	"mobile-backend-go/models"
+	"net/http"
+	"time"
 )
 
 // AddPrice adds a new price
@@ -22,46 +22,52 @@ import (
 // @Failure 500 {object} map[string]string "Internal Server Error"
 // @Router /api/prices [post]
 func AddPrice(c *gin.Context) {
-    var requestData models.PriceCreateDTO
-    if err := c.ShouldBindJSON(&requestData); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-        return
-    }
+	var requestData models.PriceCreateDTO
+	if err := c.ShouldBindJSON(&requestData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
-    // Get userID from context
-    userID, exists := c.Get("userID")
-    if !exists {
-        c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-        return
-    }
+	// Get userID from context
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
 
-    // Create Price model from DTO
-    newPrice := models.Price{
-        IngredientID: requestData.IngredientID,
-        Price:        requestData.Price,
-        Quantity:     requestData.Quantity,
-        Unit:         requestData.Unit,
-        Date:         requestData.Date,
-        UserID:       userID.(uint),
-    }
+	// Create Price model from DTO
+	newPrice := models.Price{
+		IngredientID: requestData.IngredientID,
+		Price:        requestData.Price,
+		Quantity:     requestData.Quantity,
+		Unit:         requestData.Unit,
+		Date:         requestData.Date,
+		UserID:       userID.(uint),
+	}
 
-    // Set current date if not provided
-    if newPrice.Date.IsZero() {
-        newPrice.Date = time.Now()
-    }
+	var ingredient models.Ingredient
+	if err := database.DB.First(&ingredient, requestData.IngredientID).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ingredient ID"})
+		return
+	}
 
-    if err := database.DB.Create(&newPrice).Error; err != nil {
-        log.Printf("Failed to add price: %v", err)
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add price"})
-        return
-    }
+	// Set current date if not provided
+	if newPrice.Date.IsZero() {
+		newPrice.Date = time.Now()
+	}
 
-    // Preload Ingredient for response
-    if err := database.DB.Preload("Ingredient").First(&newPrice, newPrice.ID).Error; err != nil {
-        log.Printf("Failed to load price with ingredient: %v", err)
-    }
+	if err := database.DB.Create(&newPrice).Error; err != nil {
+		log.Printf("Failed to add price: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add price"})
+		return
+	}
 
-    c.JSON(http.StatusCreated, newPrice)
+	// Preload Ingredient for response
+	if err := database.DB.Preload("Ingredient").First(&newPrice, newPrice.ID).Error; err != nil {
+		log.Printf("Failed to load price with ingredient: %v", err)
+	}
+
+	c.JSON(http.StatusCreated, newPrice)
 }
 
 // GetPrices returns list of all prices
@@ -79,45 +85,45 @@ func AddPrice(c *gin.Context) {
 // @Failure 500 {object} map[string]string "Internal Server Error"
 // @Router /api/prices [get]
 func GetPrices(c *gin.Context) {
-    var prices []models.Price
-    query := database.DB
+	var prices []models.Price
+	query := database.DB
 
-    // Get userID from context
-    userID, exists := c.Get("userID")
-    if !exists {
-        c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-        return
-    }
+	// Get userID from context
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
 
-    ingredientID := c.Query("ingredient_id")
-    date := c.Query("date")
-    sortColumn := c.Query("sort_column")
-    sortDirection := c.Query("sort_direction")
+	ingredientID := c.Query("ingredient_id")
+	date := c.Query("date")
+	sortColumn := c.Query("sort_column")
+	sortDirection := c.Query("sort_direction")
 
-    validSortColumns := map[string]bool{"price": true, "quantity": true, "date": true, "ingredient_name": true, "ingredient_type": true, "unit": true}
-    validSortDirections := map[string]bool{"ASC": true, "DESC": true}
+	validSortColumns := map[string]bool{"price": true, "quantity": true, "date": true, "ingredient_name": true, "ingredient_type": true, "unit": true}
+	validSortDirections := map[string]bool{"ASC": true, "DESC": true}
 
-    // Apply filters
-    query = query.Where("user_id = ?", userID)
-    if ingredientID != "" {
-        query = query.Where("ingredient_id = ?", ingredientID)
-    }
-    if date != "" {
-        query = query.Where("DATE(date) = ?", date)
-    }
+	// Apply filters
+	query = query.Where("user_id = ?", userID)
+	if ingredientID != "" {
+		query = query.Where("ingredient_id = ?", ingredientID)
+	}
+	if date != "" {
+		query = query.Where("DATE(date) = ?", date)
+	}
 
-    // Apply sorting
-    if validSortColumns[sortColumn] && validSortDirections[sortDirection] {
-        query = query.Order(sortColumn + " " + sortDirection)
-    } else {
-        query = query.Order("date DESC")
-    }
+	// Apply sorting
+	if validSortColumns[sortColumn] && validSortDirections[sortDirection] {
+		query = query.Order(sortColumn + " " + sortDirection)
+	} else {
+		query = query.Order("date DESC")
+	}
 
-    if err := query.Preload("Ingredient").Find(&prices).Error; err != nil {
-        log.Printf("Failed to fetch prices: %v", err)
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch prices"})
-        return
-    }
+	if err := query.Preload("Ingredient").Find(&prices).Error; err != nil {
+		log.Printf("Failed to fetch prices: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch prices"})
+		return
+	}
 
-    c.JSON(http.StatusOK, prices)
+	c.JSON(http.StatusOK, prices)
 }

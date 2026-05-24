@@ -4,7 +4,7 @@
 Jerky-vault Backend is a REST API server written in Go that provides backend functionality for managing jerky production recipes, ingredients, products, orders, and clients. The project uses a modern technology stack and follows best development practices.
 
 ## Technology Stack
-- **Programming language**: Go 1.23
+- **Programming language**: Go 1.25.10
 - **Web framework**: Gin
 - **Database**: PostgreSQL (using GORM and pgx driver)
 - **API documentation**: Swagger
@@ -33,7 +33,7 @@ Jerky-vault Backend is a REST API server written in Go that provides backend fun
 - `github.com/gin-contrib/cors` - CORS middleware
 - `github.com/jackc/pgx/v5` - PostgreSQL driver
 - `gorm.io/gorm` - ORM for database access
-- `github.com/dgrijalva/jwt-go` - JWT token handling
+- `github.com/golang-jwt/jwt/v5` - JWT token handling
 - `github.com/swaggo/swag` - Swagger documentation generation
 - `github.com/joho/godotenv` - Environment variable loader
 
