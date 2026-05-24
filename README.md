@@ -1,7 +1,7 @@
-# Jerky-vault Backend
+# BatchVault Backend
 
 ## General Overview
-Jerky-vault Backend is a REST API server written in Go that provides backend functionality for managing jerky production recipes, ingredients, products, orders, and clients. The project uses a modern technology stack and follows best development practices.
+BatchVault Backend is a REST API server written in Go that provides backend functionality for managing small food production recipes, ingredients, products, orders, clients, pricing, and dashboard analytics. The project uses a modern technology stack and follows best development practices.
 
 ## Technology Stack
 - **Programming language**: Go 1.25.10
