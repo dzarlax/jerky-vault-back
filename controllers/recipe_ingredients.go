@@ -46,6 +46,12 @@ func AddIngredientToRecipe(c *gin.Context) {
 		return
 	}
 
+	var ingredient models.Ingredient
+	if err := database.DB.First(&ingredient, requestData.IngredientID).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ingredient ID"})
+		return
+	}
+
 	// Create RecipeIngredient model from DTO
 	newRecipeIngredient := models.RecipeIngredient{
 		RecipeID:     uint(recipeID),

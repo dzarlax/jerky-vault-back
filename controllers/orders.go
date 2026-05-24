@@ -141,6 +141,10 @@ func AddOrder(c *gin.Context) {
 	if requestData.Status == "" {
 		requestData.Status = constants.OrderStatusNew // Set default status
 	}
+	if !constants.IsValidOrderStatus(requestData.Status) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid order status"})
+		return
+	}
 
 	// Check client existence and ownership
 	var client models.Client
@@ -173,7 +177,7 @@ func AddOrder(c *gin.Context) {
 	for _, item := range requestData.Items {
 		// Fetch product for validation and cost
 		var product models.Product
-		if err := database.DB.Where("id = ? AND user_id = ?", item.ProductID, userID).First(&product).Error; err != nil {
+		if err := tx.Where("id = ? AND user_id = ?", item.ProductID, userID).First(&product).Error; err != nil {
 			tx.Rollback()
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid product ID or product does not belong to user"})
 			return
@@ -276,6 +280,10 @@ func UpdateOrder(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "client_id is required"})
 		return
 	}
+	if !constants.IsValidOrderStatus(requestData.Status) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid order status"})
+		return
+	}
 
 	// Validate order items
 	for i, item := range requestData.Items {
@@ -295,6 +303,12 @@ func UpdateOrder(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("items[%d].cost_price cannot be negative", i)})
 			return
 		}
+	}
+
+	var client models.Client
+	if err := database.DB.Where("id = ? AND user_id = ?", requestData.ClientID, userID).First(&client).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid client ID or client does not belong to user"})
+		return
 	}
 
 	// Update order fields
@@ -324,7 +338,7 @@ func UpdateOrder(c *gin.Context) {
 	for _, item := range requestData.Items {
 		// Fetch product to get cost if needed
 		var product models.Product
-		if err := database.DB.Where("id = ? AND user_id = ?", item.ProductID, userID).First(&product).Error; err != nil {
+		if err := tx.Where("id = ? AND user_id = ?", item.ProductID, userID).First(&product).Error; err != nil {
 			tx.Rollback()
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid product ID or product does not belong to user"})
 			return
@@ -400,9 +414,18 @@ func UpdateOrderStatus(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing required field: status"})
 		return
 	}
+	if !constants.IsValidOrderStatus(requestBody.Status) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid order status"})
+		return
+	}
 
-	if err := database.DB.Model(&models.Order{}).Where("id = ? AND user_id = ?", orderID, userID).Update("status", requestBody.Status).Error; err != nil {
+	result := database.DB.Model(&models.Order{}).Where("id = ? AND user_id = ?", orderID, userID).Update("status", requestBody.Status)
+	if result.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update order status"})
+		return
+	}
+	if result.RowsAffected == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
 		return
 	}
 

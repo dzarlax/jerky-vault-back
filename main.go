@@ -4,6 +4,7 @@ import (
 	"log"
 	"mobile-backend-go/database"
 	_ "mobile-backend-go/docs" // Import for Swagger documentation
+	"mobile-backend-go/middleware"
 	"mobile-backend-go/routes"
 	"os"
 
@@ -42,7 +43,7 @@ func loadEnvVar(key string) string {
 func main() {
 	// Define required environment variables
 	//requiredEnvVars := []string{"DB_HOST", "DB_USER", "DB_PASSWORD", "DB_NAME", "DB_PORT", "FRONT_URL"}
-	requiredEnvVars := []string{"DATABASE_URL", "FRONT_URL"}
+	requiredEnvVars := []string{"DATABASE_URL", "FRONT_URL", "JWT_SECRET"}
 
 	// Check for all required environment variables
 	for _, envVar := range requiredEnvVars {
@@ -50,6 +51,10 @@ func main() {
 		if value == "" {
 			log.Fatalf("Environment variable %s is not set", envVar)
 		}
+	}
+
+	if err := middleware.ValidateJWTSecret(); err != nil {
+		log.Fatalf("JWT configuration error: %v", err)
 	}
 
 	// Connect to database and run migrations
