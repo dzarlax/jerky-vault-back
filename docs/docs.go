@@ -173,7 +173,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/models.Client"
+                            "$ref": "#/definitions/models.ClientCreateDTO"
                         }
                     }
                 ],
@@ -314,7 +314,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/models.Client"
+                            "$ref": "#/definitions/models.ClientUpdateDTO"
                         }
                     }
                 ],
@@ -499,7 +499,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/models.CookingSession"
+                            "$ref": "#/definitions/models.CookingSessionCreateDTO"
                         }
                     }
                 ],
@@ -560,6 +560,49 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/controllers.DashboardData"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/dashboard/profit": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Fetch profit statistics for completed orders",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Dashboard"
+                ],
+                "summary": "Get profit data",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controllers.ProfitData"
                         }
                     },
                     "401": {
@@ -663,8 +706,61 @@ const docTemplate = `{
                             }
                         }
                     },
+                    "409": {
+                        "description": "Ingredient already exists",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/ingredients/check": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Check if an ingredient with the given name already exists",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Ingredients"
+                ],
+                "summary": "Check if ingredient exists",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Ingredient name to check",
+                        "name": "name",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Check result",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -682,7 +778,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Get all orders for the authenticated user",
+                "description": "Get all orders for the authenticated user, sorted by creation date (newest first)",
                 "produces": [
                     "application/json"
                 ],
@@ -744,7 +840,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/models.Order"
+                            "type": "object"
                         }
                     }
                 ],
@@ -1163,7 +1259,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/models.Package"
+                            "$ref": "#/definitions/models.PackageCreateDTO"
                         }
                     }
                 ],
@@ -1299,7 +1395,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/models.Price"
+                            "$ref": "#/definitions/models.PriceCreateDTO"
                         }
                     }
                 ],
@@ -1424,6 +1520,65 @@ const docTemplate = `{
             }
         },
         "/api/products/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get a specific product by its ID",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Products"
+                ],
+                "summary": "Get product by ID",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Product ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Product"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
             "delete": {
                 "security": [
                     {
@@ -1665,7 +1820,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/models.Recipe"
+                            "$ref": "#/definitions/models.RecipeCreateDTO"
                         }
                     }
                 ],
@@ -1849,7 +2004,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/models.RecipeIngredient"
+                            "$ref": "#/definitions/models.RecipeIngredientCreateDTO"
                         }
                     }
                 ],
@@ -1974,35 +2129,29 @@ const docTemplate = `{
         "controllers.DashboardData": {
             "type": "object",
             "properties": {
-                "pendingOrders": {
+                "order_type_distribution": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/controllers.PendingOrder"
+                        "$ref": "#/definitions/controllers.OrderTypeDistribution"
                     }
                 },
-                "topRecipes": {
+                "pending_orders": {
+                    "type": "integer"
+                },
+                "recent_orders": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/models.Recipe"
+                        "$ref": "#/definitions/controllers.RecentOrder"
                     }
                 },
-                "totalIngredients": {
+                "total_orders": {
                     "type": "integer"
                 },
-                "totalOrders": {
+                "total_products": {
                     "type": "integer"
                 },
-                "totalProducts": {
+                "total_recipes": {
                     "type": "integer"
-                },
-                "totalRecipes": {
-                    "type": "integer"
-                },
-                "typeDistribution": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/controllers.TypeDistribution"
-                    }
                 }
             }
         },
@@ -2021,23 +2170,51 @@ const docTemplate = `{
                 }
             }
         },
-        "controllers.PendingOrder": {
+        "controllers.OrderTypeDistribution": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "controllers.ProfitData": {
+            "type": "object",
+            "properties": {
+                "order_count": {
+                    "type": "integer"
+                },
+                "total_costs": {
+                    "type": "number"
+                },
+                "total_profit": {
+                    "type": "number"
+                },
+                "total_revenue": {
+                    "type": "number"
+                }
+            }
+        },
+        "controllers.RecentOrder": {
             "type": "object",
             "properties": {
                 "client_name": {
                     "type": "string"
                 },
-                "client_surname": {
-                    "type": "string"
-                },
-                "created_at": {
-                    "type": "string"
-                },
                 "id": {
                     "type": "integer"
                 },
+                "order_date": {
+                    "type": "string"
+                },
                 "status": {
                     "type": "string"
+                },
+                "total_amount": {
+                    "type": "number"
                 }
             }
         },
@@ -2049,26 +2226,20 @@ const docTemplate = `{
             ],
             "properties": {
                 "password": {
-                    "type": "string"
+                    "type": "string",
+                    "minLength": 8
                 },
                 "username": {
                     "type": "string"
                 }
             }
         },
-        "controllers.TypeDistribution": {
-            "type": "object",
-            "properties": {
-                "count": {
-                    "type": "integer"
-                },
-                "type": {
-                    "type": "string"
-                }
-            }
-        },
         "models.Client": {
             "type": "object",
+            "required": [
+                "name",
+                "surname"
+            ],
             "properties": {
                 "address": {
                     "type": "string"
@@ -2083,7 +2254,8 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "name": {
-                    "type": "string"
+                    "type": "string",
+                    "minLength": 1
                 },
                 "orders": {
                     "type": "array",
@@ -2098,7 +2270,8 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "surname": {
-                    "type": "string"
+                    "type": "string",
+                    "minLength": 1
                 },
                 "telegram": {
                     "type": "string"
@@ -2114,8 +2287,77 @@ const docTemplate = `{
                 }
             }
         },
+        "models.ClientCreateDTO": {
+            "type": "object",
+            "required": [
+                "name",
+                "surname"
+            ],
+            "properties": {
+                "address": {
+                    "type": "string"
+                },
+                "instagram": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "phone": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "surname": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "telegram": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.ClientUpdateDTO": {
+            "type": "object",
+            "required": [
+                "name",
+                "surname"
+            ],
+            "properties": {
+                "address": {
+                    "type": "string"
+                },
+                "instagram": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "phone": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "surname": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "telegram": {
+                    "type": "string"
+                }
+            }
+        },
         "models.CookingSession": {
             "type": "object",
+            "required": [
+                "date",
+                "recipe_id",
+                "yield"
+            ],
             "properties": {
                 "created_at": {
                     "type": "string"
@@ -2148,7 +2390,28 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "yield": {
+                    "type": "string",
+                    "minLength": 1
+                }
+            }
+        },
+        "models.CookingSessionCreateDTO": {
+            "type": "object",
+            "required": [
+                "date",
+                "recipe_id",
+                "yield"
+            ],
+            "properties": {
+                "date": {
                     "type": "string"
+                },
+                "recipe_id": {
+                    "type": "integer"
+                },
+                "yield": {
+                    "type": "string",
+                    "minLength": 1
                 }
             }
         },
@@ -2189,6 +2452,10 @@ const docTemplate = `{
         },
         "models.Ingredient": {
             "type": "object",
+            "required": [
+                "name",
+                "type"
+            ],
             "properties": {
                 "cooking_session_ingredients": {
                     "type": "array",
@@ -2203,7 +2470,8 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "name": {
-                    "type": "string"
+                    "type": "string",
+                    "minLength": 1
                 },
                 "prices": {
                     "type": "array",
@@ -2218,7 +2486,8 @@ const docTemplate = `{
                     }
                 },
                 "type": {
-                    "type": "string"
+                    "type": "string",
+                    "minLength": 1
                 },
                 "updated_at": {
                     "type": "string"
@@ -2233,6 +2502,9 @@ const docTemplate = `{
                 },
                 "client_id": {
                     "type": "integer"
+                },
+                "comment": {
+                    "type": "string"
                 },
                 "created_at": {
                     "type": "string"
@@ -2297,6 +2569,9 @@ const docTemplate = `{
         },
         "models.Package": {
             "type": "object",
+            "required": [
+                "name"
+            ],
             "properties": {
                 "created_at": {
                     "type": "string"
@@ -2305,10 +2580,11 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "name": {
-                    "type": "string"
+                    "type": "string",
+                    "minLength": 1
                 },
                 "products": {
-                    "description": "Если Package связан с Product через PackageID",
+                    "description": "If Package is related to Product through PackageID",
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/models.Product"
@@ -2325,8 +2601,25 @@ const docTemplate = `{
                 }
             }
         },
+        "models.PackageCreateDTO": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "minLength": 1
+                }
+            }
+        },
         "models.Price": {
             "type": "object",
+            "required": [
+                "date",
+                "ingredient_id",
+                "price"
+            ],
             "properties": {
                 "created_at": {
                     "type": "string"
@@ -2344,10 +2637,12 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "price": {
-                    "type": "number"
+                    "type": "number",
+                    "minimum": 0
                 },
                 "quantity": {
-                    "type": "integer"
+                    "type": "integer",
+                    "minimum": 1
                 },
                 "unit": {
                     "type": "string"
@@ -2363,11 +2658,42 @@ const docTemplate = `{
                 }
             }
         },
+        "models.PriceCreateDTO": {
+            "type": "object",
+            "required": [
+                "ingredient_id",
+                "price"
+            ],
+            "properties": {
+                "date": {
+                    "type": "string"
+                },
+                "ingredient_id": {
+                    "type": "integer"
+                },
+                "price": {
+                    "type": "number",
+                    "minimum": 0
+                },
+                "quantity": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "unit": {
+                    "type": "string"
+                }
+            }
+        },
         "models.Product": {
             "type": "object",
+            "required": [
+                "name",
+                "price"
+            ],
             "properties": {
                 "cost": {
-                    "type": "number"
+                    "type": "number",
+                    "minimum": 0
                 },
                 "created_at": {
                     "type": "string"
@@ -2382,7 +2708,8 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "name": {
-                    "type": "string"
+                    "type": "string",
+                    "minLength": 1
                 },
                 "options": {
                     "type": "array",
@@ -2391,7 +2718,7 @@ const docTemplate = `{
                     }
                 },
                 "package": {
-                    "description": "Добавьте это поле, если необходимо загружать данные об упаковке",
+                    "description": "Add this field if you need to load package data",
                     "allOf": [
                         {
                             "$ref": "#/definitions/models.Package"
@@ -2399,11 +2726,12 @@ const docTemplate = `{
                     ]
                 },
                 "package_id": {
-                    "description": "Добавьте это поле",
+                    "description": "Add this field",
                     "type": "integer"
                 },
                 "price": {
-                    "type": "number"
+                    "type": "number",
+                    "minimum": 0
                 },
                 "updated_at": {
                     "type": "string"
@@ -2464,6 +2792,9 @@ const docTemplate = `{
         },
         "models.Recipe": {
             "type": "object",
+            "required": [
+                "name"
+            ],
             "properties": {
                 "cooking_sessions": {
                     "type": "array",
@@ -2478,7 +2809,8 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "name": {
-                    "type": "string"
+                    "type": "string",
+                    "minLength": 1
                 },
                 "product_options": {
                     "type": "array",
@@ -2493,7 +2825,7 @@ const docTemplate = `{
                     }
                 },
                 "total_cost": {
-                    "description": "Поле не сохраняется в базу данных",
+                    "description": "Field not persisted to database",
                     "type": "number"
                 },
                 "updated_at": {
@@ -2507,9 +2839,25 @@ const docTemplate = `{
                 }
             }
         },
+        "models.RecipeCreateDTO": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "minLength": 1
+                }
+            }
+        },
         "models.RecipeIngredient": {
             "type": "object",
             "properties": {
+                "calculated_cost": {
+                    "description": "Field not persisted to database",
+                    "type": "number"
+                },
                 "created_at": {
                     "type": "string"
                 },
@@ -2535,6 +2883,24 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.RecipeIngredientCreateDTO": {
+            "type": "object",
+            "required": [
+                "ingredient_id",
+                "quantity"
+            ],
+            "properties": {
+                "ingredient_id": {
+                    "type": "integer"
+                },
+                "quantity": {
+                    "type": "string"
+                },
+                "unit": {
                     "type": "string"
                 }
             }
@@ -2565,9 +2931,6 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/models.Package"
                     }
-                },
-                "password": {
-                    "type": "string"
                 },
                 "prices": {
                     "type": "array",
@@ -2611,8 +2974,8 @@ var SwaggerInfo = &swag.Spec{
 	Host:             "localhost:8080",
 	BasePath:         "/",
 	Schemes:          []string{},
-	Title:            "Jerky-vault Backend API",
-	Description:      "API проекта jerky-vault",
+	Title:            "BatchVault Backend API",
+	Description:      "BatchVault API for small food production management",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

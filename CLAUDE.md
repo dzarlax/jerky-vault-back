@@ -19,7 +19,7 @@ Before committing changes, verify: `grep -r "[а-яА-ЯёЁ]" **/*.go` should r
 
 ## Project Overview
 
-Jerky-vault Backend is a REST API server for a jerky production management system. It handles recipes, ingredients, cooking sessions, products, clients, orders, and provides a dashboard with analytics. The application is designed as a multi-tenant system where all data is scoped per user.
+BatchVault Backend is a REST API server for a small food production management system. It handles recipes, ingredients, cooking sessions, products, clients, orders, pricing, and dashboard analytics. The application is designed as a multi-tenant system where all data is scoped per user.
 
 **Tech Stack:**
 - Go 1.23
@@ -40,12 +40,43 @@ Jerky-vault Backend is a REST API server for a jerky production management syste
 # Run directly (requires DATABASE_URL, FRONT_URL, and JWT_SECRET env vars)
 go run main.go
 
-# Run with docker-compose
-docker-compose up
+# Run through the frontend repository's reusable dev compose.
+# This mounts backend Go files and runs `go run .` with cached Go module/build volumes.
+# The compose service intentionally uses `sh -c`, not `sh -lc`, because Alpine
+# login shell mode resets PATH and can hide /usr/local/go/bin.
+docker compose -f ../jerky-vault/docker-compose.dev.yml up backend frontend
+
+# After backend source changes, restart the Go runner without rebuilding an image.
+docker compose -f ../jerky-vault/docker-compose.dev.yml restart backend
+
+# Production-like backend image check from the frontend repository.
+docker compose -f ../jerky-vault/docker-compose.dev.yml --profile image up -d --build backend-image
 
 # Build Docker image
 docker build -t jerky-vault-back .
 ```
+
+### Frontend Repository Dev Compose Workflow
+
+The frontend repository keeps an ignored `docker-compose.dev.yml` for local
+full-stack development. Its `backend` service mounts a backend git worktree and
+runs `go run .` directly from mounted Go files. Use this for quick backend
+iteration without rebuilding a Docker image.
+
+When moving to a new backend branch, update the ignored frontend
+`docker-compose.dev.yml` backend volume to point at the new backend worktree:
+
+```yaml
+services:
+  backend:
+    volumes:
+      - ./_worktrees/<new-backend-worktree>:/app
+```
+
+Backend source commits, pushes, and pull requests must be made from the backend
+repository/worktree, not from the frontend repository. The production backend
+image is updated by backend CI after the backend PR is merged. Use
+`backend-image` only for a local production-like image check.
 
 ### Swagger Documentation
 

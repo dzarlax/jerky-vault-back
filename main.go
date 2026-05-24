@@ -31,9 +31,9 @@ func loadEnvVar(key string) string {
 	return value
 }
 
-// @title Jerky-vault Backend API
+// @title BatchVault Backend API
 // @version 1.0
-// @description Jerky-vault project API
+// @description BatchVault API for small food production management
 // @host localhost:8080
 // @BasePath /
 

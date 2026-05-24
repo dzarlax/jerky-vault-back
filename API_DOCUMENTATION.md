@@ -1,8 +1,8 @@
-# Jerky Vault Backend API Documentation
+# BatchVault Backend API Documentation
 
 ## Overview
 
-Jerky Vault Backend API is a RESTful API for managing recipes, ingredients, products, orders, and clients in jerky production.
+BatchVault Backend API is a RESTful API for managing recipes, ingredients, products, orders, clients, pricing, and dashboard workflows for small food production.
 
 **Base URL:** `http://localhost:8080`
 
