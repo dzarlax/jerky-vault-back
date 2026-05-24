@@ -50,6 +50,12 @@ Environment variables can be defined:
 ## API Documentation
 API documentation is available via Swagger UI at: `http://localhost:8080/swagger/index.html`
 
+## Container Image
+The backend image is published by GitHub Actions to:
+
+- `ghcr.io/dzarlax/jerky-vault-back:latest`
+- `ghcr.io/dzarlax/jerky-vault-back:<commit-sha>`
+
 ## Features
 
 ### 🔐 Security
