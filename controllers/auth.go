@@ -1,8 +1,10 @@
 package controllers
 
 import (
+	"errors"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"log"
 	"mobile-backend-go/database"
 	"mobile-backend-go/models"
 	"mobile-backend-go/utils"
@@ -10,6 +12,9 @@ import (
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgconn"
+	"gorm.io/gorm"
 )
 
 // Definition of Claims structure for JWT tokens
@@ -52,13 +57,36 @@ func Register(c *gin.Context) {
 		return
 	}
 
-	user := models.User{Username: payload.Username, Password: hashedPassword}
-	if err := database.DB.Create(&user).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "User already exists"})
+	var user models.User
+	err = database.DB.Transaction(func(tx *gorm.DB) error {
+		user = models.User{Username: payload.Username, Password: hashedPassword}
+		if err := tx.Create(&user).Error; err != nil {
+			return err
+		}
+
+		if _, err := database.EnsurePersonalWorkspaceForUser(tx, user.ID); err != nil {
+			return err
+		}
+
+		return nil
+	})
+	if err != nil {
+		if isUniqueViolation(err) {
+			c.JSON(http.StatusConflict, gin.H{"error": "User already exists"})
+			return
+		}
+
+		log.Printf("Failed to register user: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to register user"})
 		return
 	}
 
 	c.JSON(http.StatusCreated, user)
+}
+
+func isUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
 
 // Login authenticates a user and returns a JWT

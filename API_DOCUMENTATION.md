@@ -14,13 +14,54 @@ The API uses JWT (JSON Web Token) for authentication. After successful login, yo
 
 **Header format:** `Authorization: Bearer <your_jwt_token>`
 
+Protected routes also resolve workspace context. Clients may send `X-Workspace-ID: <workspace_id>`. Missing or blank `X-Workspace-ID` falls back to the user's default personal workspace. Malformed, zero, or inaccessible workspace IDs are rejected.
+
 **Token expiration:** 24 hours
+
+Orders include a business `date` field. When clients omit it on create, the backend falls back to the order creation time. Existing orders are backfilled from `created_at`.
 
 ---
 
 ## API Endpoints
 
 ### 🔐 Authentication
+
+### Workspaces
+
+#### GET `/api/workspaces`
+Returns workspaces available to the authenticated user.
+
+**Headers:**
+- `Authorization: Bearer <your_jwt_token>`
+
+**Response:**
+```json
+[
+  {
+    "id": 1,
+    "name": "Personal workspace",
+    "slug": "personal-1",
+    "role": "owner"
+  }
+]
+```
+
+#### GET `/api/workspaces/current`
+Returns the workspace resolved for the current request.
+
+**Headers:**
+- `Authorization: Bearer <your_jwt_token>`
+- `X-Workspace-ID: 1` optional
+
+**Response:**
+```json
+{
+  "id": 1,
+  "name": "Personal workspace",
+  "slug": "personal-1",
+  "role": "owner"
+}
+```
 
 #### POST `/api/auth/register`
 Регистрация нового пользователя.
