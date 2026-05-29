@@ -11,6 +11,7 @@ import (
 )
 
 var DB *gorm.DB
+var SupportsTrigramSearch bool
 
 // ConnectDatabase establishes database connection and runs migrations
 func ConnectDatabase() {
@@ -122,8 +123,19 @@ func createIndexes() {
 
 	// Ingredients: frequently filtered by name
 	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_ingredients_name ON ingredients(name)`)
-	DB.Exec(`CREATE EXTENSION IF NOT EXISTS pg_trgm`)
-	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_ingredients_name_trgm ON ingredients USING gin (LOWER(name) gin_trgm_ops)`)
+	SupportsTrigramSearch = false
+	if DB.Dialector.Name() == "postgres" {
+		if err := DB.Exec(`CREATE EXTENSION IF NOT EXISTS pg_trgm`).Error; err != nil {
+			log.Printf("pg_trgm extension is unavailable, ingredient search will use substring matching: %v", err)
+		} else if err := DB.Raw(`SELECT to_regprocedure('similarity(text,text)') IS NOT NULL`).Scan(&SupportsTrigramSearch).Error; err != nil {
+			log.Printf("Failed to detect pg_trgm similarity function, ingredient search will use substring matching: %v", err)
+			SupportsTrigramSearch = false
+		} else if SupportsTrigramSearch {
+			if err := DB.Exec(`CREATE INDEX IF NOT EXISTS idx_ingredients_name_trgm ON ingredients USING gin (LOWER(name) gin_trgm_ops)`).Error; err != nil {
+				log.Printf("Failed to create ingredient trigram index, fuzzy search remains enabled without the index: %v", err)
+			}
+		}
+	}
 
 	// Workspace Ingredients: active workspace working-set membership
 	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_workspace_ingredients_workspace_id ON workspace_ingredients(workspace_id)`)

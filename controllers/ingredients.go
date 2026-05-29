@@ -199,7 +199,7 @@ func SearchIngredients(c *gin.Context) {
 	db := database.DB.Order("name ASC").Limit(50)
 	if query != "" {
 		normalizedQuery := strings.ToLower(query)
-		if database.DB.Dialector.Name() == "postgres" {
+		if database.SupportsTrigramSearch {
 			db = database.DB.
 				Where("LOWER(name) LIKE ? OR similarity(LOWER(name), ?) > ?", "%"+normalizedQuery+"%", normalizedQuery, 0.28).
 				Order(clause.Expr{
