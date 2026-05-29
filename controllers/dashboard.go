@@ -99,13 +99,13 @@ func GetDashboardData(c *gin.Context) {
 
 	var orderSummaries []OrderSummary
 	if err := database.DB.Table("orders").
-		Select(`orders.id, clients.name as client_name, orders.status, orders.created_at,
+		Select(`orders.id, clients.name as client_name, orders.status, orders.date as created_at,
 			COALESCE(SUM(order_items.price * order_items.quantity), 0) as total`).
 		Joins("JOIN clients ON orders.client_id = clients.id").
 		Joins("LEFT JOIN order_items ON orders.id = order_items.order_id AND order_items.deleted_at IS NULL").
 		Where("orders.user_id = ? AND orders.deleted_at IS NULL", userIDUint).
-		Group("orders.id, clients.name, orders.status, orders.created_at").
-		Order("orders.created_at DESC").
+		Group("orders.id, clients.name, orders.status, orders.date").
+		Order("orders.date DESC, orders.created_at DESC").
 		Limit(5).
 		Scan(&orderSummaries).Error; err != nil {
 		handleError(c, "Failed to fetch recent orders", err)

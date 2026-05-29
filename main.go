@@ -67,7 +67,7 @@ func main() {
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{os.Getenv("FRONT_URL"), "http://localhost:3000"}, // Next.js frontend domain
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-Workspace-ID"},
 		AllowCredentials: true,
 	}))
 

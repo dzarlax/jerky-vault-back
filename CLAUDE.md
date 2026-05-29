@@ -94,11 +94,11 @@ Access Swagger UI at: `http://localhost:8080/swagger/index.html`
 All database operations use the global `database.DB` *gorm.DB instance. Auto-migration runs on startup in `database.ConnectDatabase()` for all models defined in `models/`.
 
 **Database Optimization:**
-- 18 indexes are automatically created on startup via `createIndexes()` function
-- Indexes cover: orders (user_id, client_id, status, created_at), order_items, products, clients, recipes, ingredients, prices, cooking_sessions, recipe_ingredients
+- Indexes are automatically created on startup via `createIndexes()` function
+- Indexes cover: workspace membership/default workspace lookup, orders (user_id, client_id, status, created_at), order_items, products, clients, recipes, ingredients, prices, cooking_sessions, recipe_ingredients
 - Indexes use `IF NOT EXISTS` for safe repeated execution
 
-**Important:** All queries MUST include `user_id` filtering to ensure data isolation between users. The JWT middleware extracts `userID` from the token and sets it in the Gin context, accessible via `c.MustGet("userID").(uint)`.
+**Important:** Protected requests now have both identity and workspace context. `middleware.JWTMiddleware()` extracts `userID`; `middleware.WorkspaceMiddleware()` resolves `workspaceID` from `X-Workspace-ID` or the user's default personal workspace. Existing business tables still use `user_id` until the workspace ownership migration, so legacy operational queries must keep `user_id` filtering for now. New workspace-aware code should use `workspaceID` and membership checks.
 
 ### Routes Structure
 
@@ -113,7 +113,9 @@ Routes are defined in `routes/routes.go`:
 - Uses in-memory storage with automatic cleanup of old timestamps
 - Returns `429 Too Many Requests` with error message when exceeded
 
-All protected routes use `middleware.JWTMiddleware()` which:
+All protected routes use `middleware.JWTMiddleware()` followed by `middleware.WorkspaceMiddleware()`.
+
+`middleware.JWTMiddleware()`:
 1. Validates the JWT Bearer token
 2. Checks token expiration (must not be expired)
 3. Verifies signing method (HMAC only, protects against "none algorithm" attacks)
@@ -122,11 +124,18 @@ All protected routes use `middleware.JWTMiddleware()` which:
 6. Sets `userID` in the Gin context
 7. Requires `JWT_SECRET` environment variable (min 16 characters)
 
+`middleware.WorkspaceMiddleware()`:
+1. Reads optional `X-Workspace-ID`
+2. Falls back to the user's default personal workspace when the header is missing or blank
+3. Rejects malformed, zero, or inaccessible workspace IDs
+4. Sets `workspaceID`, `workspaceRole`, and `workspace` in the Gin context
+
 ### Controllers
 
 Controllers in `controllers/` follow these patterns:
 - Extract `userID` from context: `userID := c.MustGet("userID").(uint)`
-- Always filter database queries by `user_id`
+- Extract workspace context for new workspace-aware code: `workspaceID := c.MustGet("workspaceID").(uint)`
+- Keep filtering current legacy business-table queries by `user_id` until those tables are migrated to `workspace_id`
 - Use GORM's `Preload()` for eager-loading relationships
 - Return appropriate HTTP status codes
 - Return errors as JSON: `c.JSON(statusCode, gin.H{"error": "message"})`

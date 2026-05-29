@@ -13,6 +13,7 @@ type Order struct {
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `json:"deleted_at,omitempty" gorm:"index" swaggerignore:"true"`
 	ClientID  uint           `json:"client_id"`
+	Date      time.Time      `json:"date"`
 	Status    string         `json:"status" gorm:"not null"`
 	Comment   string         `json:"comment" gorm:"type:text"`
 	UserID    uint           `json:"user_id"`

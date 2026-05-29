@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Implementation Plan: Workspace Foundation</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      --bg: #f5f7fa;
+      --panel: #ffffff;
+      --text: #1f2937;
+      --muted: #5b6472;
+      --border: #dce3ec;
+      --accent: #2563eb;
+      --warn: #b45309;
+      --risk: #b91c1c;
+      --ok: #047857;
+      --code: #eef2f7;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+    main {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 32px;
+    }
+
+    header {
+      margin-bottom: 20px;
+    }
+
+    section {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      margin: 16px 0;
+    }
+
+    h1, h2, h3 {
+      line-height: 1.2;
+      margin: 0 0 12px;
+    }
+
+    h1 {
+      font-size: 32px;
+    }
+
+    h2 {
+      font-size: 20px;
+    }
+
+    p {
+      margin: 0 0 12px;
+    }
+
+    ul, ol {
+      margin: 8px 0 0;
+      padding-left: 22px;
+    }
+
+    li {
+      margin: 6px 0;
+    }
+
+    code {
+      background: var(--code);
+      padding: 2px 5px;
+      border-radius: 4px;
+      font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+      font-size: 0.95em;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: #e8eef8;
+      color: #1e3a8a;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .badge.warn {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 12px;
+    }
+
+    .note {
+      border-left: 4px solid var(--accent);
+    }
+
+    .risk {
+      border-left: 4px solid var(--risk);
+    }
+
+    .approval {
+      border-left: 4px solid var(--warn);
+    }
+
+    .done-later {
+      color: var(--muted);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      font-size: 14px;
+    }
+
+    th, td {
+      border: 1px solid var(--border);
+      padding: 8px 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: #f8fafc;
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Implementation Plan: Workspace Foundation</h1>
+    <p>This plan covers the first backend-only step toward workspace-scoped operational data in <code>jerky-vault-back</code>.</p>
+    <div class="meta">
+      <span class="badge">Date: 2026-05-28</span>
+      <span class="badge">Branch: codex/workspace-foundation-plan</span>
+      <span class="badge warn">Approval required before implementation</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>Task Summary</h2>
+    <p>Add a workspace foundation without migrating business tables yet. Users stay identities. New workspaces become the future operational boundary. Each existing user gets a default personal workspace and owner membership. Protected requests can resolve a current workspace and verify membership.</p>
+    <p>This step intentionally stops before moving <code>recipes</code>, <code>prices</code>, <code>products</code>, <code>clients</code>, <code>orders</code>, <code>packages</code>, or <code>cooking_sessions</code> from <code>user_id</code> to <code>workspace_id</code>.</p>
+  </section>
+
+  <section>
+    <h2>Current Behavior</h2>
+    <ul>
+      <li><code>middleware/auth.go</code> validates JWTs and stores only <code>userID</code> in Gin context.</li>
+      <li>Most operational controllers filter by <code>user_id</code>, including recipes, prices, products, clients, orders, packages, cooking sessions, and dashboard queries.</li>
+      <li><code>models.Ingredient</code> has no <code>user_id</code>. Its <code>name</code> field is globally unique.</li>
+      <li><code>controllers/ingredients.go</code> returns the full global ingredient list and creates global ingredients.</li>
+      <li><code>controllers/prices.go</code> stores price history rows by <code>user_id</code> and <code>ingredient_id</code>.</li>
+      <li>Schema setup is currently driven by GORM <code>AutoMigrate</code> plus explicit index creation in <code>database/database.go</code>; <code>database/init.go</code> has a second AutoMigrate list.</li>
+      <li>Existing tests are lightweight unit tests only; no current workspace or controller integration tests exist.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Desired Behavior</h2>
+    <ul>
+      <li>Add <code>Workspace</code> and <code>WorkspaceMember</code> models and migrate them on startup.</li>
+      <li>Backfill one default personal workspace for every existing user, with an owner membership.</li>
+      <li>On protected requests, resolve the current workspace from <code>X-Workspace-ID</code> when present.</li>
+      <li>If <code>X-Workspace-ID</code> is missing, fall back to the user's default personal workspace to preserve current frontend behavior.</li>
+      <li>Reject requests that specify a workspace the authenticated user is not a member of.</li>
+      <li>Store both <code>userID</code> and <code>workspaceID</code> in Gin context for future controllers.</li>
+      <li>Add read/bootstrap endpoints only, so the frontend can discover available workspaces without introducing workspace creation before business data is workspace-owned.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Scope Boundary</h2>
+    <div class="grid">
+      <div>
+        <h3>In Scope</h3>
+        <ul>
+          <li>Workspace and membership data model.</li>
+          <li>Default personal workspace backfill.</li>
+          <li>Workspace resolution middleware/helpers.</li>
+          <li>Membership enforcement tests.</li>
+          <li>Basic workspace listing and current workspace endpoint, including the user's role.</li>
+          <li>Documentation updates where existing instructions mention user-only ownership.</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Out of Scope</h3>
+        <ul>
+          <li class="done-later">Adding <code>workspace_id</code> to prices or other business tables.</li>
+          <li class="done-later">Changing ingredient list behavior to workspace ingredients.</li>
+          <li class="done-later">Adding <code>WorkspaceIngredient</code>.</li>
+          <li class="done-later">Adding account or company ownership.</li>
+          <li class="done-later">Frontend workspace selector implementation.</li>
+          <li class="done-later">Removing or renaming existing <code>user_id</code> columns.</li>
+          <li class="done-later">Workspace creation and member management endpoints.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Likely File Changes</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>File</th>
+          <th>Reason</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>constants/workspace_roles.go</code></td>
+          <td>Add role constants such as <code>owner</code>, <code>manager</code>, <code>operator</code>, and <code>viewer</code> in one place instead of scattering role strings.</td>
+        </tr>
+        <tr>
+          <td><code>models/workspace.go</code></td>
+          <td>Add <code>Workspace</code> model with name, slug, nullable future account id, and internal <code>personal_user_id</code> marker hidden from JSON.</td>
+        </tr>
+        <tr>
+          <td><code>models/workspace_member.go</code></td>
+          <td>Add <code>WorkspaceMember</code> model with workspace id, user id, and role.</td>
+        </tr>
+        <tr>
+          <td><code>models/user.go</code></td>
+          <td>Add optional relationships for workspace memberships if useful for preloading. Avoid changing auth semantics.</td>
+        </tr>
+        <tr>
+          <td><code>database/database.go</code></td>
+          <td>Include new models in the authoritative AutoMigrate path, create workspace indexes, and invoke idempotent backfill after schema setup.</td>
+        </tr>
+        <tr>
+          <td><code>database/init.go</code></td>
+          <td>Remove the dead <code>CreateTables()</code> duplicate AutoMigrate path. It is not called anywhere in the repository.</td>
+        </tr>
+        <tr>
+          <td><code>database/workspace_backfill.go</code></td>
+          <td>Add explicit, repeatable backfill for personal workspaces and owner memberships.</td>
+        </tr>
+        <tr>
+          <td><code>middleware/auth.go</code></td>
+          <td>Keep JWT authentication focused on token validation and <code>userID</code> extraction. Do not mix workspace resolution into this file beyond any shared helper needs.</td>
+        </tr>
+        <tr>
+          <td><code>middleware/workspace.go</code></td>
+          <td>Add current workspace resolution, membership validation, and context population helpers.</td>
+        </tr>
+        <tr>
+          <td><code>controllers/workspaces.go</code></td>
+          <td>Add endpoints for listing accessible workspaces and retrieving the current workspace.</td>
+        </tr>
+        <tr>
+          <td><code>routes/routes.go</code></td>
+          <td>Register workspace endpoints and apply workspace middleware consistently to protected routes.</td>
+        </tr>
+        <tr>
+          <td><code>CLAUDE.md</code>, <code>README.md</code>, API docs</td>
+          <td>Update user-only ownership wording after implementation. Swagger generated files may need regeneration if this repo's doc workflow supports it.</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Implementation Steps</h2>
+    <ol>
+      <li>Add workspace role constants in <code>constants/workspace_roles.go</code>, starting with <code>owner</code>, <code>manager</code>, <code>operator</code>, and <code>viewer</code>.</li>
+      <li>Add <code>Workspace</code> and <code>WorkspaceMember</code> GORM models with soft delete support and JSON fields.</li>
+      <li>Resolve the duplicate AutoMigrate lists before adding new models:
+        <ul>
+          <li>Delete <code>database/init.go</code>; <code>database.CreateTables()</code> is not called anywhere.</li>
+          <li>Keep <code>database.ConnectDatabase()</code> as the authoritative migration path.</li>
+        </ul>
+      </li>
+      <li>Add explicit indexes:
+        <ul>
+          <li><code>idx_workspace_members_user_id</code> on <code>workspace_members(user_id)</code>.</li>
+          <li><code>idx_workspace_members_workspace_id</code> on <code>workspace_members(workspace_id)</code>.</li>
+          <li>Partial unique index on active <code>(workspace_id, user_id)</code>.</li>
+          <li>A uniqueness guard for per-user default personal workspaces using nullable internal <code>personal_user_id</code> and a unique partial index where not deleted.</li>
+        </ul>
+      </li>
+      <li>Add idempotent backfill:
+        <ul>
+          <li>Find every user.</li>
+          <li>Create a personal workspace if one does not already exist for that user.</li>
+          <li>Create owner membership if absent.</li>
+          <li>Run in a transaction and tolerate repeated startup runs.</li>
+        </ul>
+      </li>
+      <li>Add workspace resolver as separate middleware in <code>middleware/workspace.go</code> and wire it after <code>JWTMiddleware()</code>:
+        <ul>
+          <li>Parse optional <code>X-Workspace-ID</code> as an unsigned integer.</li>
+          <li>Treat a missing or blank <code>X-Workspace-ID</code> as fallback to the default personal workspace.</li>
+          <li>Return <code>400 Bad Request</code> for malformed, negative, or zero workspace ids.</li>
+          <li>When present, require active membership for <code>userID</code>.</li>
+          <li>When absent, load or create the default personal workspace for <code>userID</code>.</li>
+          <li>Set <code>workspaceID</code> and optionally <code>workspaceRole</code> in Gin context.</li>
+        </ul>
+      </li>
+      <li>Use database indexes for the added request lookup paths; do not add a workspace cache in this phase. One indexed membership lookup or personal workspace lookup per protected request is acceptable for this migration step.</li>
+      <li>Add workspace bootstrap endpoints:
+        <ul>
+          <li><code>GET /api/workspaces</code> returns active workspaces the user belongs to, with role.</li>
+          <li><code>GET /api/workspaces/current</code> returns the resolved current workspace and role.</li>
+        </ul>
+      </li>
+      <li>Add tests for backfill and membership enforcement.</li>
+      <li>Update documentation to state that <code>workspaceID</code> now exists in request context, while legacy operational data still uses <code>user_id</code> until later phases.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Data, API, Auth, and UX Impact</h2>
+    <ul>
+      <li>Data: adds two new tables and indexes. Existing rows in operational tables are not changed in this phase.</li>
+      <li>API: existing endpoints should keep working because default workspace fallback resolves a workspace when no header is sent. This phase adds only workspace read/bootstrap endpoints, not creation or member management.</li>
+      <li>Auth: JWT payload remains unchanged; workspace authorization is derived from database membership after token validation.</li>
+      <li>Permissions: this phase validates membership only. Role-specific permissions are stored through constants but not enforced beyond membership.</li>
+      <li>UX: no visible ingredient or pricing behavior changes yet. Frontend can start reading <code>GET /api/workspaces</code> and sending <code>X-Workspace-ID</code> later.</li>
+      <li>Deployment: startup will run AutoMigrate and the workspace backfill. This should be tested on a database copy or staging-equivalent database before production deploy.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Test Plan</h2>
+    <ul>
+      <li><code>go test ./...</code> for all unit and new middleware/backfill tests.</li>
+      <li><code>go vet ./...</code> for static checks.</li>
+      <li><code>go build ./...</code> to confirm the service compiles.</li>
+      <li>If DB credentials are available, run the service against a non-production database and verify:
+        <ul>
+          <li><code>workspaces</code> and <code>workspace_members</code> are created.</li>
+          <li>Every existing user has exactly one default personal workspace.</li>
+          <li>Every personal workspace has an owner membership.</li>
+          <li>Repeated startup does not create duplicates.</li>
+        </ul>
+      </li>
+      <li>Add HTTP/middleware tests that prove:
+        <ul>
+          <li>No <code>X-Workspace-ID</code> uses the default personal workspace.</li>
+          <li>A valid member can use <code>X-Workspace-ID</code>.</li>
+          <li>A non-member receives a forbidden response.</li>
+          <li>An invalid header value receives a bad request response.</li>
+        </ul>
+      </li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Manual QA Checklist</h2>
+    <ul>
+      <li>Register or log in as a user and call an existing endpoint without <code>X-Workspace-ID</code>; it should still work.</li>
+      <li>Call <code>GET /api/workspaces</code>; it should return the user's personal workspace.</li>
+      <li>Call <code>GET /api/workspaces/current</code> without a header; it should return the personal workspace and role.</li>
+      <li>Call a protected endpoint with another user's workspace id; it should return a clear authorization error.</li>
+      <li>Restart the service and verify workspace counts do not increase unexpectedly.</li>
+      <li>Smoke check ingredients and prices endpoints to confirm no behavior changed in this phase.</li>
+    </ul>
+  </section>
+
+  <section class="risk">
+    <h2>Risks and Edge Cases</h2>
+    <ul>
+      <li>AutoMigrate plus backfill can hide migration ordering mistakes. Mitigation: make backfill explicit, idempotent, run after schema creation, and remove or consolidate the duplicate AutoMigrate path before adding models.</li>
+      <li>Default fallback can mask missing workspace selection in future frontend code. Mitigation: log fallback use at debug/info level during migration and make new UI send explicit workspace ids.</li>
+      <li>If personal workspace uniqueness is based only on generated slug, display name changes or slug collisions can create ambiguity. Mitigation: use stable internal <code>personal_user_id</code> with an index, hidden from JSON.</li>
+      <li>Applying workspace middleware to all protected routes may affect endpoints that only need profile-level auth. Mitigation: keep fallback cheap and deterministic; if needed, split profile routes into auth-only later.</li>
+      <li>Documentation drift is likely because <code>CLAUDE.md</code> currently says all data isolation is by <code>user_id</code>. Mitigation: update it in the same implementation pass.</li>
+      <li>Role storage without role enforcement can be misunderstood. Mitigation: document that roles are reserved for later authorization rules.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Rollback Plan</h2>
+    <ul>
+      <li>Because no existing business table ownership changes in this phase, rollback is mostly code-level: redeploy the previous backend image or commit.</li>
+      <li>Leaving <code>workspaces</code> and <code>workspace_members</code> tables in the database is safe if old code ignores them.</li>
+      <li>If cleanup is required, drop only the new workspace tables and their indexes after confirming no later phase has started writing <code>workspace_id</code> to business tables.</li>
+      <li>Do not remove or mutate existing <code>user_id</code> data during this phase.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Open Questions</h2>
+    <ol>
+      <li>Default personal workspace name: use a neutral display value such as <code>Personal workspace</code>, unless product copy requires a localized/frontend-provided label later.</li>
+      <li><code>personal_user_id</code>: keep internal with <code>json:"-"</code>.</li>
+      <li><code>GET /api/workspaces/current</code>: include the user's role.</li>
+      <li>Workspace creation endpoints: defer. This foundation phase exposes only read/bootstrap endpoints plus backfill.</li>
+      <li>Role-specific permissions: defer until workspace creation/member management or business-data migration needs them.</li>
+    </ol>
+  </section>
+
+  <section class="approval">
+    <h2>Approval Gate</h2>
+    <p>Implementation must not start until the user explicitly approves this plan. Current planned decisions are: read/bootstrap endpoints only, workspace resolution in a separate middleware after JWT, consolidated AutoMigrate handling before adding models, role constants in <code>constants/</code>, hidden <code>personal_user_id</code>, and role included in current-workspace responses.</p>
+  </section>
+
+  <section>
+    <h2>Implementation Notes</h2>
+    <ul>
+      <li>Implemented on branch <code>codex/workspace-foundation-plan</code> after approval.</li>
+      <li>Added <code>Workspace</code> and <code>WorkspaceMember</code> models, workspace role constants, and read/bootstrap workspace endpoints.</li>
+      <li>Removed dead <code>database/init.go</code>; <code>database.ConnectDatabase()</code> remains the migration path.</li>
+      <li>Added idempotent personal workspace backfill after schema/index creation.</li>
+      <li>Added <code>middleware.WorkspaceMiddleware()</code> after JWT auth. Missing or blank <code>X-Workspace-ID</code> falls back to the personal workspace; malformed, zero, or inaccessible ids are rejected.</li>
+      <li>Kept <code>GET /api/workspaces</code> as JWT-only bootstrap, so stale or inaccessible workspace headers cannot block workspace discovery.</li>
+      <li>Optimized no-header workspace fallback to perform a read-only lookup first and call create-capable ensure only when the personal workspace is missing.</li>
+      <li>Made lazy personal workspace creation conflict-tolerant for concurrent first requests by using insert-on-conflict-do-nothing plus re-read.</li>
+      <li>Registration now eagerly creates the user's personal workspace in the same transaction as user creation, so JWT-only workspace bootstrap is not empty for freshly registered users.</li>
+      <li>Registration error handling now distinguishes duplicate usernames from internal registration/workspace creation failures: duplicate username returns <code>409</code>, internal failures return <code>500</code>.</li>
+      <li>Kept current business tables on <code>user_id</code>; no <code>workspace_id</code> migration was done in this phase.</li>
+      <li>Updated documentation to describe the interim state: legacy business data still filters by <code>user_id</code>, while new workspace-aware code uses <code>workspaceID</code>.</li>
+      <li>Local dev compose in the frontend repo was pointed at an isolated Neon schema, <code>workspace_foundation_dev</code>, for verification.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Checks Run</h2>
+    <ul>
+      <li><code>go test ./...</code> passed.</li>
+      <li><code>go vet ./...</code> passed.</li>
+      <li><code>go build ./...</code> passed.</li>
+      <li><code>docker compose -f docker-compose.dev.yml up -d backend</code> passed from the frontend repo against the isolated Neon schema.</li>
+      <li>API smoke test passed: register, login, <code>GET /api/workspaces/current</code>, <code>GET /api/workspaces</code>, invalid workspace header returns <code>400</code>, inaccessible workspace id returns <code>403</code>.</li>
+      <li>Restart/backfill idempotency verified in PostgreSQL: one user, one personal workspace, one owner membership after restart.</li>
+      <li>Verified workspace tables exist only in <code>workspace_foundation_dev</code> after cleanup.</li>
+      <li>Migration verification found and fixed a GORM/index ordering issue: the personal workspace uniqueness guard now uses explicit unique partial index <code>idx_workspaces_personal_user_id_active_unique</code> instead of conflicting with GORM's non-unique index name.</li>
+      <li>Verified duplicate checks after restart: zero duplicate personal workspaces and zero duplicate active memberships.</li>
+      <li>Follow-up schema drift check restored <code>orders.date</code>: existing rows are backfilled from <code>created_at</code>, and new orders fall back to creation time when clients omit <code>date</code>.</li>
+      <li>Review-fix smoke test passed: <code>GET /api/workspaces</code> returns <code>200</code> even with inaccessible <code>X-Workspace-ID</code>; <code>GET /api/workspaces/current</code> returns <code>403</code> for inaccessible workspace id; normal no-header protected requests return <code>200</code>.</li>
+      <li>Fresh registration smoke test passed: immediately after register/login, <code>GET /api/workspaces</code> returns one owner personal workspace, even when the request includes an inaccessible stored workspace header.</li>
+      <li>Duplicate registration smoke test passed: registering existing user <code>123</code> returns <code>409 Conflict</code>.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Known Limitations and Follow-up</h2>
+    <ul>
+      <li>Swagger generated files were not regenerated in this pass; the hand-maintained API documentation was updated.</li>
+      <li>Workspace creation/member management remains deferred until a later phase.</li>
+      <li>Business tables still use <code>user_id</code>; Phase 2 should migrate operational ownership to <code>workspace_id</code>.</li>
+      <li>Frontend dev compose is an ignored local file outside this repo; its isolated-schema changes are local machine setup, not part of this backend branch.</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>

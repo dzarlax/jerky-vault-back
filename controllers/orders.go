@@ -8,6 +8,7 @@ import (
 	"mobile-backend-go/models"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -50,7 +51,7 @@ func GetOrder(c *gin.Context) {
 
 // GetOrders returns a list of all orders
 // @Summary Get list of orders
-// @Description Get all orders for the authenticated user, sorted by creation date (newest first)
+// @Description Get all orders for the authenticated user, sorted by order date (newest first)
 // @Tags Orders
 // @Security BearerAuth
 // @Produce  json
@@ -68,7 +69,7 @@ func GetOrders(c *gin.Context) {
 		Preload("Items").
 		Preload("Items.Product").
 		Preload("Items.Product.Package").
-		Order("created_at DESC").
+		Order("date DESC, created_at DESC").
 		Find(&orders).Error; err != nil {
 		log.Printf("Failed to fetch orders for userID %v: %v", userID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch orders"})
@@ -95,9 +96,10 @@ func AddOrder(c *gin.Context) {
 	userID := c.MustGet("userID").(uint)
 
 	var requestData struct {
-		ClientID uint   `json:"client_id" binding:"required"`
-		Status   string `json:"status"`
-		Comment  string `json:"comment"`
+		ClientID uint      `json:"client_id" binding:"required"`
+		Date     time.Time `json:"date"`
+		Status   string    `json:"status"`
+		Comment  string    `json:"comment"`
 		Items    []struct {
 			ProductID uint    `json:"product_id" binding:"required"`
 			Quantity  int     `json:"quantity" binding:"required,min=1"`
@@ -153,9 +155,15 @@ func AddOrder(c *gin.Context) {
 		return
 	}
 
+	orderDate := requestData.Date
+	if orderDate.IsZero() {
+		orderDate = time.Now()
+	}
+
 	// Create order
 	newOrder := models.Order{
 		ClientID: requestData.ClientID,
+		Date:     orderDate,
 		Status:   requestData.Status,
 		Comment:  requestData.Comment,
 		UserID:   userID,
@@ -258,9 +266,10 @@ func UpdateOrder(c *gin.Context) {
 	}
 
 	var requestData struct {
-		ClientID uint   `json:"client_id" binding:"required"`
-		Status   string `json:"status"`
-		Comment  string `json:"comment"`
+		ClientID uint      `json:"client_id" binding:"required"`
+		Date     time.Time `json:"date"`
+		Status   string    `json:"status"`
+		Comment  string    `json:"comment"`
 		Items    []struct {
 			ProductID uint    `json:"product_id" binding:"required"`
 			Quantity  int     `json:"quantity" binding:"required,min=1"`
@@ -313,6 +322,11 @@ func UpdateOrder(c *gin.Context) {
 
 	// Update order fields
 	existingOrder.ClientID = requestData.ClientID
+	if !requestData.Date.IsZero() {
+		existingOrder.Date = requestData.Date
+	} else if existingOrder.Date.IsZero() {
+		existingOrder.Date = existingOrder.CreatedAt
+	}
 	existingOrder.Status = requestData.Status
 	existingOrder.Comment = requestData.Comment
 

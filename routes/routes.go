@@ -24,6 +24,12 @@ func SetupRoutes(router *gin.Engine) {
 	protectedRoutes := router.Group("/api")
 	protectedRoutes.Use(middleware.JWTMiddleware())
 	{
+		// Workspace routes
+		protectedRoutes.GET("/workspaces", controllers.GetWorkspaces)
+
+		protectedRoutes.Use(middleware.WorkspaceMiddleware())
+		protectedRoutes.GET("/workspaces/current", controllers.GetCurrentWorkspace)
+
 		// Recipe routes
 		protectedRoutes.GET("/recipes", controllers.GetRecipes)
 		protectedRoutes.GET("/recipes/:id", controllers.GetRecipe)
