@@ -15,4 +15,4 @@ services:
       DB_NAME: 
       JWT_SECRET: 
       FRONT_URL: 
-
+      STRICT_WORKSPACE_INGREDIENTS: "false"

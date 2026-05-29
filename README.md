@@ -42,6 +42,7 @@ The project uses the following environment variables:
 - `DATABASE_URL` - PostgreSQL connection string
 - `FRONT_URL` - Frontend application URL for CORS
 - `JWT_SECRET` - Secret key for JWT token signing (min 16 characters)
+- `STRICT_WORKSPACE_INGREDIENTS` - Optional feature flag. Set to `true` to require active workspace ingredient membership for new price and recipe-ingredient writes. Defaults to compatibility mode when unset.
 
 Environment variables can be defined:
 1. Directly in the system

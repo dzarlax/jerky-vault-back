@@ -55,13 +55,17 @@ func AddPrice(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ingredient ID"})
 		return
 	}
-	if _, err := database.EnsureWorkspaceIngredient(database.DB, workspaceID, requestData.IngredientID); err != nil {
+	if err := prepareWorkspaceIngredientForWrite(workspaceID, requestData.IngredientID); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ingredient ID"})
 			return
 		}
-		log.Printf("Failed to link price ingredient to workspace: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to link ingredient to workspace"})
+		if errors.Is(err, database.ErrWorkspaceIngredientNotActive) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Ingredient is not in workspace"})
+			return
+		}
+		log.Printf("Failed to validate price ingredient workspace membership: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to validate ingredient workspace membership"})
 		return
 	}
 

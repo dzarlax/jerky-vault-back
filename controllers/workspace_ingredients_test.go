@@ -3,6 +3,7 @@ package controllers
 import (
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -218,7 +219,8 @@ func TestCreateIngredientExistingNameEnsuresWorkspaceMembership(t *testing.T) {
 	assertWorkspaceIngredientExists(t, fixture.PersonalWorkspace.ID, fixture.GlobalIngredient.ID)
 }
 
-func TestPriceAndRecipeWritesAutoLinkGlobalIngredients(t *testing.T) {
+func TestPriceAndRecipeWritesAutoLinkGlobalIngredientsWhenStrictModeDisabled(t *testing.T) {
+	t.Setenv("STRICT_WORKSPACE_INGREDIENTS", "false")
 	fixture := setupWorkspaceIngredientTest(t)
 
 	priceResponse := runWorkspaceJSONRequest(
@@ -262,6 +264,161 @@ func TestPriceAndRecipeWritesAutoLinkGlobalIngredients(t *testing.T) {
 		t.Fatalf("add recipe ingredient status = %d body = %s", recipeIngredientResponse.Code, recipeIngredientResponse.Body.String())
 	}
 	assertWorkspaceIngredientExists(t, fixture.PersonalWorkspace.ID, otherIngredient.ID)
+}
+
+func TestPriceAndRecipeWritesRejectUnlinkedIngredientsWhenStrictModeEnabled(t *testing.T) {
+	t.Setenv("STRICT_WORKSPACE_INGREDIENTS", "true")
+	fixture := setupWorkspaceIngredientTest(t)
+
+	priceResponse := runWorkspaceJSONRequest(
+		fixture.User.ID,
+		fixture.PersonalWorkspace.ID,
+		AddPrice,
+		http.MethodPost,
+		"/prices",
+		"/prices",
+		models.PriceCreateDTO{
+			IngredientID: fixture.GlobalIngredient.ID,
+			Price:        12,
+			Quantity:     1,
+			Unit:         "kg",
+			Date:         time.Now(),
+		},
+	)
+	if priceResponse.Code != http.StatusBadRequest {
+		t.Fatalf("strict unlinked price status = %d body = %s", priceResponse.Code, priceResponse.Body.String())
+	}
+	assertJSONError(t, priceResponse, "Ingredient is not in workspace")
+	assertWorkspaceIngredientCount(t, fixture.PersonalWorkspace.ID, fixture.GlobalIngredient.ID, 0)
+	assertPriceCount(t, fixture.PersonalWorkspace.ID, fixture.GlobalIngredient.ID, 0)
+
+	recipeIngredientResponse := runWorkspaceJSONRequest(
+		fixture.User.ID,
+		fixture.PersonalWorkspace.ID,
+		AddIngredientToRecipe,
+		http.MethodPost,
+		"/recipes/:id/ingredients",
+		"/recipes/"+uintToString(fixture.Recipe.ID)+"/ingredients",
+		models.RecipeIngredientCreateDTO{
+			IngredientID: fixture.GlobalIngredient.ID,
+			Quantity:     "10",
+			Unit:         "g",
+		},
+	)
+	if recipeIngredientResponse.Code != http.StatusBadRequest {
+		t.Fatalf("strict unlinked recipe ingredient status = %d body = %s", recipeIngredientResponse.Code, recipeIngredientResponse.Body.String())
+	}
+	assertJSONError(t, recipeIngredientResponse, "Ingredient is not in workspace")
+	assertRecipeIngredientCount(t, fixture.Recipe.ID, fixture.GlobalIngredient.ID, 0)
+}
+
+func TestPriceAndRecipeWritesAcceptExplicitlyLinkedIngredientsWhenStrictModeEnabled(t *testing.T) {
+	t.Setenv("STRICT_WORKSPACE_INGREDIENTS", "true")
+	fixture := setupWorkspaceIngredientTest(t)
+
+	linkResponse := runWorkspaceJSONRequest(
+		fixture.User.ID,
+		fixture.PersonalWorkspace.ID,
+		AddWorkspaceIngredient,
+		http.MethodPost,
+		"/workspace-ingredients",
+		"/workspace-ingredients",
+		models.WorkspaceIngredientCreateDTO{
+			IngredientID: fixture.GlobalIngredient.ID,
+		},
+	)
+	if linkResponse.Code != http.StatusCreated {
+		t.Fatalf("link workspace ingredient status = %d body = %s", linkResponse.Code, linkResponse.Body.String())
+	}
+
+	priceResponse := runWorkspaceJSONRequest(
+		fixture.User.ID,
+		fixture.PersonalWorkspace.ID,
+		AddPrice,
+		http.MethodPost,
+		"/prices",
+		"/prices",
+		models.PriceCreateDTO{
+			IngredientID: fixture.GlobalIngredient.ID,
+			Price:        12,
+			Quantity:     1,
+			Unit:         "kg",
+			Date:         time.Now(),
+		},
+	)
+	if priceResponse.Code != http.StatusCreated {
+		t.Fatalf("strict linked price status = %d body = %s", priceResponse.Code, priceResponse.Body.String())
+	}
+	assertPriceCount(t, fixture.PersonalWorkspace.ID, fixture.GlobalIngredient.ID, 1)
+
+	recipeIngredientResponse := runWorkspaceJSONRequest(
+		fixture.User.ID,
+		fixture.PersonalWorkspace.ID,
+		AddIngredientToRecipe,
+		http.MethodPost,
+		"/recipes/:id/ingredients",
+		"/recipes/"+uintToString(fixture.Recipe.ID)+"/ingredients",
+		models.RecipeIngredientCreateDTO{
+			IngredientID: fixture.GlobalIngredient.ID,
+			Quantity:     "10",
+			Unit:         "g",
+		},
+	)
+	if recipeIngredientResponse.Code != http.StatusCreated {
+		t.Fatalf("strict linked recipe ingredient status = %d body = %s", recipeIngredientResponse.Code, recipeIngredientResponse.Body.String())
+	}
+	assertRecipeIngredientCount(t, fixture.Recipe.ID, fixture.GlobalIngredient.ID, 1)
+}
+
+func TestPriceAndRecipeWritesRejectInactiveIngredientsWhenStrictModeEnabled(t *testing.T) {
+	t.Setenv("STRICT_WORKSPACE_INGREDIENTS", "true")
+	fixture := setupWorkspaceIngredientTest(t)
+
+	if err := database.DB.Model(&models.WorkspaceIngredient{}).
+		Where("workspace_id = ? AND ingredient_id = ?", fixture.PersonalWorkspace.ID, fixture.LinkedIngredient.ID).
+		Update("active", false).Error; err != nil {
+		t.Fatalf("deactivate workspace ingredient: %v", err)
+	}
+
+	priceResponse := runWorkspaceJSONRequest(
+		fixture.User.ID,
+		fixture.PersonalWorkspace.ID,
+		AddPrice,
+		http.MethodPost,
+		"/prices",
+		"/prices",
+		models.PriceCreateDTO{
+			IngredientID: fixture.LinkedIngredient.ID,
+			Price:        12,
+			Quantity:     1,
+			Unit:         "kg",
+			Date:         time.Now(),
+		},
+	)
+	if priceResponse.Code != http.StatusBadRequest {
+		t.Fatalf("strict inactive price status = %d body = %s", priceResponse.Code, priceResponse.Body.String())
+	}
+	assertJSONError(t, priceResponse, "Ingredient is not in workspace")
+	assertPriceCount(t, fixture.PersonalWorkspace.ID, fixture.LinkedIngredient.ID, 0)
+
+	recipeIngredientResponse := runWorkspaceJSONRequest(
+		fixture.User.ID,
+		fixture.PersonalWorkspace.ID,
+		AddIngredientToRecipe,
+		http.MethodPost,
+		"/recipes/:id/ingredients",
+		"/recipes/"+uintToString(fixture.Recipe.ID)+"/ingredients",
+		models.RecipeIngredientCreateDTO{
+			IngredientID: fixture.LinkedIngredient.ID,
+			Quantity:     "10",
+			Unit:         "g",
+		},
+	)
+	if recipeIngredientResponse.Code != http.StatusBadRequest {
+		t.Fatalf("strict inactive recipe ingredient status = %d body = %s", recipeIngredientResponse.Code, recipeIngredientResponse.Body.String())
+	}
+	assertJSONError(t, recipeIngredientResponse, "Ingredient is not in workspace")
+	assertRecipeIngredientCount(t, fixture.Recipe.ID, fixture.LinkedIngredient.ID, 0)
 }
 
 func TestWorkspaceIngredientEndpointsManageMembership(t *testing.T) {
@@ -463,5 +620,45 @@ func assertWorkspaceIngredientCount(t *testing.T, workspaceID uint, ingredientID
 	}
 	if count != want {
 		t.Fatalf("workspace ingredient count for workspace=%d ingredient=%d is %d, want %d", workspaceID, ingredientID, count, want)
+	}
+}
+
+func assertPriceCount(t *testing.T, workspaceID uint, ingredientID uint, want int64) {
+	t.Helper()
+
+	var count int64
+	if err := database.DB.Model(&models.Price{}).
+		Where("workspace_id = ? AND ingredient_id = ?", workspaceID, ingredientID).
+		Count(&count).Error; err != nil {
+		t.Fatalf("count prices: %v", err)
+	}
+	if count != want {
+		t.Fatalf("price count for workspace=%d ingredient=%d is %d, want %d", workspaceID, ingredientID, count, want)
+	}
+}
+
+func assertRecipeIngredientCount(t *testing.T, recipeID uint, ingredientID uint, want int64) {
+	t.Helper()
+
+	var count int64
+	if err := database.DB.Model(&models.RecipeIngredient{}).
+		Where("recipe_id = ? AND ingredient_id = ?", recipeID, ingredientID).
+		Count(&count).Error; err != nil {
+		t.Fatalf("count recipe ingredients: %v", err)
+	}
+	if count != want {
+		t.Fatalf("recipe ingredient count for recipe=%d ingredient=%d is %d, want %d", recipeID, ingredientID, count, want)
+	}
+}
+
+func assertJSONError(t *testing.T, response *httptest.ResponseRecorder, want string) {
+	t.Helper()
+
+	var payload map[string]string
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if payload["error"] != want {
+		t.Fatalf("error = %q, want %q", payload["error"], want)
 	}
 }
