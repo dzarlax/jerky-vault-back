@@ -10,6 +10,8 @@ import (
 	"mobile-backend-go/models"
 )
 
+var ErrWorkspaceIngredientNotActive = errors.New("ingredient is not active in workspace")
+
 const workspaceIngredientUsageSourceSQL = `
 SELECT DISTINCT p.workspace_id AS workspace_id, p.ingredient_id AS ingredient_id
 FROM prices AS p
@@ -126,4 +128,16 @@ func IngredientInWorkspace(db *gorm.DB, workspaceID uint, ingredientID uint) (bo
 		return false, err
 	}
 	return count > 0, nil
+}
+
+// RequireWorkspaceIngredient fails unless an ingredient is active in a workspace working set.
+func RequireWorkspaceIngredient(db *gorm.DB, workspaceID uint, ingredientID uint) error {
+	inWorkspace, err := IngredientInWorkspace(db, workspaceID, ingredientID)
+	if err != nil {
+		return err
+	}
+	if !inWorkspace {
+		return ErrWorkspaceIngredientNotActive
+	}
+	return nil
 }

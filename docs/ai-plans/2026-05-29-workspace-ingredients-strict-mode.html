@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Workspace Ingredients Strict Mode Plan</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fa;
+      --card: #ffffff;
+      --text: #1f2933;
+      --muted: #5f6b7a;
+      --border: #d8dee6;
+      --accent: #2563eb;
+      --warn: #b45309;
+      --danger: #b91c1c;
+      --ok: #047857;
+      --code: #eef2f7;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.55;
+    }
+
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 40px 24px 64px;
+    }
+
+    header {
+      margin-bottom: 28px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 34px;
+      line-height: 1.15;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      font-size: 22px;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 18px 0 8px;
+      font-size: 17px;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 0 0 12px;
+    }
+
+    ul,
+    ol {
+      margin: 0;
+      padding-left: 22px;
+    }
+
+    li {
+      margin: 7px 0;
+    }
+
+    code {
+      background: var(--code);
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 0.94em;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 8px 0 4px;
+      font-size: 14px;
+    }
+
+    th,
+    td {
+      border: 1px solid var(--border);
+      padding: 9px 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: #f0f3f7;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 22px;
+      margin: 16px 0;
+    }
+
+    .meta {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .badge {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 3px 9px;
+      font-size: 12px;
+      font-weight: 650;
+      margin-right: 6px;
+    }
+
+    .badge.ok {
+      background: #d1fae5;
+      color: var(--ok);
+    }
+
+    .badge.warn {
+      background: #fef3c7;
+      color: var(--warn);
+    }
+
+    .badge.danger {
+      background: #fee2e2;
+      color: var(--danger);
+    }
+
+    .callout {
+      border-left: 4px solid var(--accent);
+      background: #eff6ff;
+      padding: 12px 14px;
+      margin: 14px 0;
+      border-radius: 4px;
+    }
+
+    .callout.warning {
+      border-left-color: var(--warn);
+      background: #fffbeb;
+    }
+
+    .callout.danger {
+      border-left-color: var(--danger);
+      background: #fef2f2;
+    }
+
+    .checklist li {
+      list-style: none;
+      margin-left: -20px;
+    }
+
+    .checklist li::before {
+      content: "□";
+      margin-right: 8px;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <p class="meta">Created: 2026-05-29 · Branch: <code>codex/workspace-ingredients-strict-mode-plan</code></p>
+      <h1>Workspace Ingredients Strict Mode</h1>
+      <p class="meta">Final backend step after workspace-aware web and mobile clients have been deployed.</p>
+    </header>
+
+    <section class="card">
+      <h2>Approval Gate</h2>
+      <p>
+        This is a planning-only change. Do not modify production code until this plan is approved.
+        The intended implementation is small, but it changes write behavior and can break stale clients that still submit global ingredient ids without first linking them to the active workspace.
+      </p>
+      <p>
+        Recommended approval condition: confirm the web app, mobile app, and widget are all deployed with workspace-aware ingredient pickers and <code>X-Workspace-ID</code> propagation.
+      </p>
+      <ul class="checklist">
+        <li>Verify the deployed web bundle sends <code>X-Workspace-ID</code> through the shared fetcher and uses <code>/api/workspace-ingredients</code> for price and recipe ingredient pickers.</li>
+        <li>Verify the deployed mobile app sends <code>X-Workspace-ID</code> from the shared API client and uses workspace ingredients for price and recipe ingredient pickers.</li>
+        <li>Verify the deployed widget sends the selected workspace id for dashboard and profit requests.</li>
+        <li>Verify stale or missing workspace ids produce validation/client recovery behavior, not auth logout behavior.</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>Summary</h2>
+      <p>
+        Phase 3A intentionally kept compatibility auto-linking: when a client submitted a valid global ingredient id to price or recipe-ingredient writes, the backend linked that ingredient into the active workspace automatically.
+      </p>
+      <p>
+        Now that clients are expected to use <code>/api/workspace-ingredients</code> for pickers and explicit linking, strict mode should remove that hidden auto-link from write paths. Price and recipe-ingredient writes should only accept ingredients that are active members of the selected workspace when <code>STRICT_WORKSPACE_INGREDIENTS=true</code>.
+      </p>
+      <p>
+        The feature flag should default off. This allows a dark deploy of the code and a fast environment rollback while older mobile builds may still exist in the field.
+      </p>
+    </section>
+
+    <section class="card">
+      <h2>Implementation Results</h2>
+      <p>
+        Implemented on 2026-05-29 after approval. The backend now supports <code>STRICT_WORKSPACE_INGREDIENTS</code>, defaulting to compatibility mode when unset.
+      </p>
+      <ul>
+        <li>Added <code>database.RequireWorkspaceIngredient</code> and <code>database.ErrWorkspaceIngredientNotActive</code>.</li>
+        <li>Added controller policy helper <code>prepareWorkspaceIngredientForWrite</code>.</li>
+        <li>Updated <code>AddPrice</code> and <code>AddIngredientToRecipe</code> to use strict active-membership validation only when the feature flag is enabled.</li>
+        <li>Kept <code>CreateIngredient</code> and <code>AddWorkspaceIngredient</code> as explicit add/link flows.</li>
+        <li>Added flag on/off behavioral tests for price and recipe-ingredient writes, including unlinked and inactive memberships.</li>
+        <li>Documented <code>STRICT_WORKSPACE_INGREDIENTS</code> in <code>README.md</code> and <code>docker-compose.yml.example</code>.</li>
+        <li>Swagger annotations did not require regeneration because the affected endpoints already document <code>400</code> responses.</li>
+      </ul>
+      <p>
+        Checks run: <code>go test ./controllers -run "TestPriceAndRecipeWrites|TestWorkspaceIngredientEndpointsManageMembership|TestCreateIngredientExistingNameEnsuresWorkspaceMembership" -count=1</code>, <code>go test ./...</code>, <code>go vet ./...</code>, <code>go build ./...</code>, and <code>rg -n "EnsureWorkspaceIngredient|STRICT_WORKSPACE_INGREDIENTS|RequireWorkspaceIngredient|ErrWorkspaceIngredientNotActive" controllers database</code>.
+      </p>
+    </section>
+
+    <section class="card">
+      <h2>Current Behavior</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Endpoint</th>
+            <th>Current behavior</th>
+            <th>Why it existed</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>POST /api/prices</code></td>
+            <td>Validates that the global ingredient exists, then calls <code>EnsureWorkspaceIngredient</code> before creating the price.</td>
+            <td>Compatibility for old clients using the global ingredient list as a picker.</td>
+          </tr>
+          <tr>
+            <td><code>POST /api/recipes/:id/ingredients</code></td>
+            <td>Validates the recipe is in the active workspace, validates the global ingredient exists, then calls <code>EnsureWorkspaceIngredient</code>.</td>
+            <td>Compatibility for old recipe-edit flows.</td>
+          </tr>
+          <tr>
+            <td><code>POST /api/ingredients</code></td>
+            <td>Creates a global ingredient or returns <code>409</code> for an existing name, and ensures workspace membership in both cases.</td>
+            <td>This is an explicit create-or-add flow and should remain valid.</td>
+          </tr>
+          <tr>
+            <td><code>POST /api/workspace-ingredients</code></td>
+            <td>Links an existing global ingredient to the active workspace through <code>EnsureWorkspaceIngredient</code>.</td>
+            <td>This is the explicit workspace working-set management endpoint and should remain valid.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <h2>Desired Behavior</h2>
+      <ul>
+        <li>With <code>STRICT_WORKSPACE_INGREDIENTS=false</code> or unset, current compatibility auto-link behavior remains active.</li>
+        <li>With <code>STRICT_WORKSPACE_INGREDIENTS=true</code>, <code>POST /api/prices</code> rejects valid global ingredients that are not active members of the active workspace.</li>
+        <li>With <code>STRICT_WORKSPACE_INGREDIENTS=true</code>, <code>POST /api/recipes/:id/ingredients</code> rejects valid global ingredients that are not active members of the recipe workspace.</li>
+        <li>Inactive workspace ingredients are treated as not available for new writes only when strict mode is enabled.</li>
+        <li>Invalid global ingredient ids still return the existing validation error path.</li>
+        <li><code>POST /api/ingredients</code> remains the create-or-add-to-workspace flow.</li>
+        <li><code>POST /api/workspace-ingredients</code> remains the explicit link/reactivate flow.</li>
+        <li><code>GET /api/ingredients</code> and <code>GET /api/ingredients/search</code> remain global dictionary endpoints.</li>
+        <li>Price list reads stay scoped by <code>prices.workspace_id</code> only. Do not hide existing price history because a membership was later deactivated.</li>
+        <li>Recipe reads stay stable for existing recipes. Already-used ingredients must remain visible even if their workspace membership was later deactivated.</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>Non-Goals</h2>
+      <ul>
+        <li>No schema change or migration.</li>
+        <li>No backfill change.</li>
+        <li>No change to global ingredient uniqueness or <code>409 existing_id</code> behavior.</li>
+        <li>No fix for the existing price sort spillover where <code>ingredient_name</code> and <code>ingredient_type</code> are listed as sortable without a joined ingredient query.</li>
+        <li>No frontend or mobile changes in this backend PR.</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>Likely Files</h2>
+      <ul>
+        <li><code>database/workspace_ingredients.go</code> — add a strict helper or reuse <code>IngredientInWorkspace</code> with clearer error handling.</li>
+        <li><code>controllers/prices.go</code> — replace write-path auto-link with active-membership validation.</li>
+        <li><code>controllers/recipe_ingredients.go</code> — replace write-path auto-link with active-membership validation.</li>
+        <li><code>controllers/workspace_ingredients_test.go</code> — update compatibility tests and add strict-mode coverage.</li>
+        <li><code>controllers/workspace_ingredient_policy.go</code> — add feature-flagged write policy helper.</li>
+        <li><code>README.md</code> and <code>docker-compose.yml.example</code> — document the rollout flag.</li>
+        <li><code>docs/docs.go</code>, <code>docs/swagger.json</code>, <code>docs/swagger.yaml</code> — regenerate Swagger if response/error annotations change.</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>Implementation Steps</h2>
+      <ol>
+        <li>
+          Add strict-mode config parsing, for example <code>STRICT_WORKSPACE_INGREDIENTS=true</code>, defaulting to off when unset.
+        </li>
+        <li>
+          Add a small strict validation helper, for example <code>RequireWorkspaceIngredient(db, workspaceID, ingredientID)</code>, or inline <code>IngredientInWorkspace</code> checks in the two controllers.
+        </li>
+        <li>
+          Keep the helper active-only: <code>workspace_ingredients.active = true</code> and non-deleted rows only.
+        </li>
+        <li>
+          In <code>AddPrice</code>, keep the existing global ingredient existence check. If strict mode is on, require active workspace membership. If strict mode is off, keep the existing <code>EnsureWorkspaceIngredient</code> compatibility path.
+        </li>
+        <li>
+          In <code>AddIngredientToRecipe</code>, keep the recipe workspace ownership check and global ingredient existence check. If strict mode is on, require active workspace membership. If strict mode is off, keep the existing <code>EnsureWorkspaceIngredient</code> compatibility path.
+        </li>
+        <li>
+          Return a non-auth failure for valid-but-not-linked ingredients. Recommended status: <code>400</code>, with a clear message such as <code>Ingredient is not in workspace</code>. Avoid <code>403</code> because existing clients may treat it as authentication failure.
+        </li>
+        <li>
+          Leave <code>CreateIngredient</code> and <code>AddWorkspaceIngredient</code> using <code>EnsureWorkspaceIngredient</code>. Those endpoints are explicit add/link flows.
+        </li>
+        <li>
+          Audit every remaining <code>EnsureWorkspaceIngredient</code> call. Expected controller callers after the change: ingredient create/existing-name path, workspace ingredient add path, and the explicit compatibility branch used only when <code>STRICT_WORKSPACE_INGREDIENTS</code> is off.
+        </li>
+        <li>
+          Update Swagger annotations if the documented error behavior for price or recipe-ingredient writes changes.
+        </li>
+        <li>
+          Regenerate Swagger docs if annotations changed.
+        </li>
+      </ol>
+    </section>
+
+    <section class="card">
+      <h2>Test Plan</h2>
+      <ul class="checklist">
+        <li>With <code>STRICT_WORKSPACE_INGREDIENTS=false</code> or unset, price write with a valid global but unlinked ingredient keeps old compatibility behavior and auto-links the workspace ingredient.</li>
+        <li>With <code>STRICT_WORKSPACE_INGREDIENTS=true</code>, price write with active workspace ingredient succeeds.</li>
+        <li>With <code>STRICT_WORKSPACE_INGREDIENTS=true</code>, price write with valid global ingredient that is not linked to the workspace returns <code>400</code> and does not create a price.</li>
+        <li>With <code>STRICT_WORKSPACE_INGREDIENTS=true</code>, price write with deactivated workspace ingredient returns <code>400</code> and does not create a price.</li>
+        <li>With <code>STRICT_WORKSPACE_INGREDIENTS=false</code> or unset, recipe ingredient write with a valid global but unlinked ingredient keeps old compatibility behavior and auto-links the workspace ingredient.</li>
+        <li>With <code>STRICT_WORKSPACE_INGREDIENTS=true</code>, recipe ingredient write with active workspace ingredient succeeds.</li>
+        <li>With <code>STRICT_WORKSPACE_INGREDIENTS=true</code>, recipe ingredient write with valid global ingredient that is not linked to the recipe workspace returns <code>400</code> and does not create a recipe ingredient.</li>
+        <li>With <code>STRICT_WORKSPACE_INGREDIENTS=true</code>, recipe ingredient write with deactivated workspace ingredient returns <code>400</code> and does not create a recipe ingredient.</li>
+        <li>Invalid ingredient id remains rejected through the existing invalid-id path.</li>
+        <li><code>POST /api/workspace-ingredients</code> can link or reactivate an ingredient, after which price and recipe writes succeed.</li>
+        <li><code>POST /api/ingredients</code> create path still creates a global ingredient and links it to the active workspace.</li>
+        <li><code>POST /api/ingredients</code> existing-name <code>409</code> path still ensures or reactivates workspace membership.</li>
+        <li>Existing recipes and price history remain readable when a workspace ingredient is later deactivated.</li>
+      </ul>
+
+      <h3>Verification Commands</h3>
+      <ul>
+        <li><code>go test ./...</code></li>
+        <li><code>go vet ./...</code></li>
+        <li><code>go build ./...</code></li>
+        <li><code>rg -n "EnsureWorkspaceIngredient|STRICT_WORKSPACE_INGREDIENTS|RequireWorkspaceIngredient|ErrWorkspaceIngredientNotActive" controllers database</code> and manually confirm controller auto-linking exists only in explicit add/link flows and in the compatibility branch used when the strict flag is off.</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>Manual QA</h2>
+      <ol>
+        <li>Before enabling the flag, verify the deployed web, mobile, and widget clients send <code>X-Workspace-ID</code> on the relevant API requests.</li>
+        <li>Use a workspace-aware web client to add an ingredient to the workspace working set, then create a price for it.</li>
+        <li>Use the recipe editor to add a workspace ingredient to a recipe.</li>
+        <li>Deactivate a workspace ingredient and confirm it disappears from new pickers but remains visible in existing recipe details.</li>
+        <li>Try to submit a valid global ingredient id that is not in the active workspace and confirm the API returns a form-level validation error, not an auth/logout flow.</li>
+        <li>Repeat the dashboard/profit smoke check after writes to confirm the workspace header still scopes aggregate data.</li>
+      </ol>
+
+      <div class="callout warning">
+        <strong>Deployment gate:</strong> deploy the code with <code>STRICT_WORKSPACE_INGREDIENTS</code> off first, observe logs, then enable the flag only after web, mobile, and widget clients that depend on workspace ingredient pickers are live enough for the intended user base.
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Production Data Checks</h2>
+      <p>
+        No migration is expected. Still, run read-only checks before deployment to confirm there is no obvious data shape problem.
+      </p>
+      <ul>
+        <li>Confirm active workspace ingredient backfill remains complete for current usage sources.</li>
+        <li>Confirm <code>workspace_ingredients</code> has rows for active workspaces that already have prices or recipe ingredients.</li>
+        <li>Do not block deployment solely because old historical prices reference inactive membership; strict mode affects new writes, not history reads.</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>Risks</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Risk</th>
+            <th>Impact</th>
+            <th>Mitigation</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Old web or mobile clients still submit global ingredient ids.</td>
+            <td>New price or recipe ingredient writes fail.</td>
+            <td>Deploy strict code with the flag off first. Enable <code>STRICT_WORKSPACE_INGREDIENTS</code> only after rollout verification.</td>
+          </tr>
+          <tr>
+            <td>Mobile app rollout lag.</td>
+            <td>Installed older builds may fail write flows after strict deployment.</td>
+            <td>Keep the flag off during the observation window. If failures appear after enabling, disable the flag without redeploying the backend image.</td>
+          </tr>
+          <tr>
+            <td>Error status accidentally uses <code>403</code>.</td>
+            <td>Clients may log the user out instead of showing a validation error.</td>
+            <td>Use <code>400</code> for non-member ingredient validation failures.</td>
+          </tr>
+          <tr>
+            <td>Inactive ingredient display is confused with write eligibility.</td>
+            <td>Existing recipes may appear broken if reads are over-filtered.</td>
+            <td>Only enforce active membership on new writes. Keep historical reads stable.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <h2>Rollback Plan</h2>
+      <ul>
+        <li>Primary rollback: set <code>STRICT_WORKSPACE_INGREDIENTS=false</code> and restart the backend.</li>
+        <li>Backend image rollback remains available: redeploy the previous backend image or revert the strict-mode PR.</li>
+        <li>No database rollback should be required because this plan has no schema or data migration.</li>
+        <li>If client errors appear after deployment, check API logs for <code>Ingredient is not in workspace</code> responses and confirm which client version produced them.</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>Open Questions</h2>
+      <ol>
+        <li>
+          Feature flag decision: resolved in favor of <code>STRICT_WORKSPACE_INGREDIENTS</code>, default off. This supports dark deploy and a fast environment rollback while old mobile builds may still exist.
+        </li>
+        <li>
+          Final status code for valid global but non-member ingredients: recommendation is <code>400</code>, not <code>403</code>, to avoid auth/logout behavior.
+        </li>
+        <li>
+          How long should old mobile builds be tolerated? If there is no reliable adoption signal, wait a short observation window before strict deployment.
+        </li>
+      </ol>
+    </section>
+  </main>
+</body>
+</html>
