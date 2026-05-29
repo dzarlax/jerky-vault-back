@@ -174,7 +174,7 @@ func TestSearchIngredientsFindsGlobalNonMember(t *testing.T) {
 		SearchIngredients,
 		http.MethodGet,
 		"/ingredients/search",
-		"/ingredients/search?query=garlic",
+		"/ingredients/search?query=GARLIC",
 	)
 	if response.Code != http.StatusOK {
 		t.Fatalf("search status = %d body = %s", response.Code, response.Body.String())

@@ -1198,7 +1198,8 @@ paths:
       - Ingredients
   /api/ingredients/search:
     get:
-      description: Search global ingredients by name
+      description: Search global ingredients by name. PostgreSQL deployments also
+        rank typo-tolerant matches using trigram similarity.
       parameters:
       - description: Search query
         in: query

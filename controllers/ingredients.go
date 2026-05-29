@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // CreateIngredient creates a new ingredient
@@ -185,7 +186,7 @@ func GetIngredients(c *gin.Context) {
 
 // SearchIngredients searches the global ingredient dictionary.
 // @Summary Search global ingredients
-// @Description Search global ingredients by name
+// @Description Search global ingredients by name. PostgreSQL deployments also rank typo-tolerant matches using trigram similarity.
 // @Tags Ingredients
 // @Security BearerAuth
 // @Produce  json
@@ -197,7 +198,18 @@ func SearchIngredients(c *gin.Context) {
 	query := strings.TrimSpace(c.Query("query"))
 	db := database.DB.Order("name ASC").Limit(50)
 	if query != "" {
-		db = db.Where("LOWER(name) LIKE LOWER(?)", "%"+query+"%")
+		normalizedQuery := strings.ToLower(query)
+		if database.DB.Dialector.Name() == "postgres" {
+			db = database.DB.
+				Where("LOWER(name) LIKE ? OR similarity(LOWER(name), ?) > ?", "%"+normalizedQuery+"%", normalizedQuery, 0.28).
+				Order(clause.Expr{
+					SQL:  "CASE WHEN LOWER(name) LIKE ? THEN 0 ELSE 1 END, similarity(LOWER(name), ?) DESC, name ASC",
+					Vars: []interface{}{"%" + normalizedQuery + "%", normalizedQuery},
+				}).
+				Limit(50)
+		} else {
+			db = db.Where("LOWER(name) LIKE ?", "%"+normalizedQuery+"%")
+		}
 	}
 
 	var ingredients []models.Ingredient

@@ -122,6 +122,8 @@ func createIndexes() {
 
 	// Ingredients: frequently filtered by name
 	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_ingredients_name ON ingredients(name)`)
+	DB.Exec(`CREATE EXTENSION IF NOT EXISTS pg_trgm`)
+	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_ingredients_name_trgm ON ingredients USING gin (LOWER(name) gin_trgm_ops)`)
 
 	// Workspace Ingredients: active workspace working-set membership
 	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_workspace_ingredients_workspace_id ON workspace_ingredients(workspace_id)`)
