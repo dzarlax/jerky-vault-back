@@ -16,6 +16,7 @@ import (
 // @Tags Recipes
 // @Security BearerAuth
 // @Produce  json
+// @Param X-Workspace-ID header int false "Workspace ID"
 // @Param recipe_id query int false "Filter by Recipe ID" example(1)
 // @Param ingredient_id query int false "Filter by Ingredient ID" example(3)
 // @Success 200 {array} models.Recipe
@@ -25,6 +26,7 @@ import (
 // @Router /api/recipes [get]
 func GetRecipes(c *gin.Context) {
 	userID := c.MustGet("userID").(uint)
+	workspaceID := c.MustGet("workspaceID").(uint)
 	var recipes []models.Recipe
 
 	// Filtering by recipe_id
@@ -76,7 +78,7 @@ func GetRecipes(c *gin.Context) {
 		for j, ri := range recipe.RecipeIngredients {
 			// Load latest price for each ingredient
 			var latestPrice models.Price
-			if err := database.DB.Where("ingredient_id = ? AND user_id = ?", ri.IngredientID, userID).
+			if err := database.DB.Where("ingredient_id = ? AND workspace_id = ?", ri.IngredientID, workspaceID).
 				Order("date DESC").
 				Limit(1).
 				First(&latestPrice).Error; err == nil {
@@ -100,6 +102,7 @@ func GetRecipes(c *gin.Context) {
 // @Tags Recipes
 // @Security BearerAuth
 // @Produce  json
+// @Param X-Workspace-ID header int false "Workspace ID"
 // @Param id path int true "Recipe ID"
 // @Success 200 {object} models.Recipe
 // @Failure 400 {object} map[string]string "Invalid recipe ID"
@@ -108,6 +111,7 @@ func GetRecipes(c *gin.Context) {
 // @Router /api/recipes/{id} [get]
 func GetRecipe(c *gin.Context) {
 	userID := c.MustGet("userID").(uint)
+	workspaceID := c.MustGet("workspaceID").(uint)
 	recipeID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid recipe ID"})
@@ -127,7 +131,7 @@ func GetRecipe(c *gin.Context) {
 	for j, ri := range recipe.RecipeIngredients {
 		// Load latest price for each ingredient
 		var latestPrice models.Price
-		if err := database.DB.Where("ingredient_id = ? AND user_id = ?", ri.IngredientID, userID).
+		if err := database.DB.Where("ingredient_id = ? AND workspace_id = ?", ri.IngredientID, workspaceID).
 			Order("date DESC").
 			Limit(1).
 			First(&latestPrice).Error; err == nil {

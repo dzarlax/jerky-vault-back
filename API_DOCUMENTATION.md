@@ -16,6 +16,8 @@ The API uses JWT (JSON Web Token) for authentication. After successful login, yo
 
 Protected routes also resolve workspace context. Clients may send `X-Workspace-ID: <workspace_id>`. Missing or blank `X-Workspace-ID` falls back to the user's default personal workspace. Malformed, zero, or inaccessible workspace IDs are rejected.
 
+Prices are scoped by the resolved workspace. `user_id` on price responses remains the creating user/audit field during the workspace migration.
+
 **Token expiration:** 24 hours
 
 Orders include a business `date` field. When clients omit it on create, the backend falls back to the order creation time. Existing orders are backfilled from `created_at`.
@@ -469,6 +471,8 @@ Authenticate user.
 #### GET `/api/prices`
 Получение списка цен на ингредиенты.
 
+Returns prices for the resolved workspace. Use `X-Workspace-ID` to select a workspace, or omit it to use the default personal workspace.
+
 **Query Parameters:**
 - `ingredient_id` (optional) - Фильтрация по ID ингредиента
 
@@ -483,6 +487,7 @@ Authenticate user.
     "unit": "kg",
     "date": "2024-01-01T00:00:00Z",
     "user_id": 1,
+    "workspace_id": 1,
     "ingredient": {
       "id": 1,
       "name": "Говядина",
@@ -496,6 +501,8 @@ Authenticate user.
 
 #### POST `/api/prices`
 Добавление новой цены для ингредиента.
+
+Creates a price in the resolved workspace. The request body does not accept `workspace_id`; it is taken from `X-Workspace-ID` or the default personal workspace.
 
 **Request Body:**
 ```json
@@ -517,7 +524,8 @@ Authenticate user.
   "quantity": 1,
   "unit": "kg",
   "date": "2024-01-01T00:00:00Z",
-  "user_id": 1
+  "user_id": 1,
+  "workspace_id": 1
 }
 ```
 

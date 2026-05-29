@@ -1307,7 +1307,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Get all prices with optional filters",
+                "description": "Get all prices for the current workspace with optional filters",
                 "produces": [
                     "application/json"
                 ],
@@ -1316,6 +1316,12 @@ const docTemplate = `{
                 ],
                 "summary": "Get list of prices",
                 "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Workspace ID",
+                        "name": "X-Workspace-ID",
+                        "in": "header"
+                    },
                     {
                         "type": "integer",
                         "description": "Ingredient ID",
@@ -1389,6 +1395,12 @@ const docTemplate = `{
                 ],
                 "summary": "Add a new price",
                 "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Workspace ID",
+                        "name": "X-Workspace-ID",
+                        "in": "header"
+                    },
                     {
                         "description": "Price data",
                         "name": "price",
@@ -1744,6 +1756,12 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "integer",
+                        "description": "Workspace ID",
+                        "name": "X-Workspace-ID",
+                        "in": "header"
+                    },
+                    {
+                        "type": "integer",
                         "example": 1,
                         "description": "Filter by Recipe ID",
                         "name": "recipe_id",
@@ -1868,6 +1886,12 @@ const docTemplate = `{
                 ],
                 "summary": "Get a recipe",
                 "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Workspace ID",
+                        "name": "X-Workspace-ID",
+                        "in": "header"
+                    },
                     {
                         "type": "integer",
                         "description": "Recipe ID",
@@ -2792,6 +2816,12 @@ const docTemplate = `{
                     "$ref": "#/definitions/models.User"
                 },
                 "user_id": {
+                    "type": "integer"
+                },
+                "workspace": {
+                    "$ref": "#/definitions/models.Workspace"
+                },
+                "workspace_id": {
                     "type": "integer"
                 }
             }

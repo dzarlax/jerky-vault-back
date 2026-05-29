@@ -98,7 +98,7 @@ All database operations use the global `database.DB` *gorm.DB instance. Auto-mig
 - Indexes cover: workspace membership/default workspace lookup, orders (user_id, client_id, status, created_at), order_items, products, clients, recipes, ingredients, prices, cooking_sessions, recipe_ingredients
 - Indexes use `IF NOT EXISTS` for safe repeated execution
 
-**Important:** Protected requests now have both identity and workspace context. `middleware.JWTMiddleware()` extracts `userID`; `middleware.WorkspaceMiddleware()` resolves `workspaceID` from `X-Workspace-ID` or the user's default personal workspace. Existing business tables still use `user_id` until the workspace ownership migration, so legacy operational queries must keep `user_id` filtering for now. New workspace-aware code should use `workspaceID` and membership checks.
+**Important:** Protected requests now have both identity and workspace context. `middleware.JWTMiddleware()` extracts `userID`; `middleware.WorkspaceMiddleware()` resolves `workspaceID` from `X-Workspace-ID` or the user's default personal workspace. Prices are scoped by `workspace_id`; most other legacy business tables still use `user_id` until later workspace ownership migrations. New workspace-aware code should use `workspaceID` and membership checks.
 
 ### Routes Structure
 
@@ -134,8 +134,9 @@ All protected routes use `middleware.JWTMiddleware()` followed by `middleware.Wo
 
 Controllers in `controllers/` follow these patterns:
 - Extract `userID` from context: `userID := c.MustGet("userID").(uint)`
-- Extract workspace context for new workspace-aware code: `workspaceID := c.MustGet("workspaceID").(uint)`
+- Extract workspace context for workspace-aware code: `workspaceID := c.MustGet("workspaceID").(uint)`
 - Keep filtering current legacy business-table queries by `user_id` until those tables are migrated to `workspace_id`
+- Filter price queries by `workspace_id`; keep `prices.user_id` as the creating user/audit field, not the ownership boundary
 - Use GORM's `Preload()` for eager-loading relationships
 - Return appropriate HTTP status codes
 - Return errors as JSON: `c.JSON(statusCode, gin.H{"error": "message"})`
@@ -241,7 +242,7 @@ Optional (for .env file):
 
 ## Conventions
 
-1. **Data Isolation:** Every database query must include `user_id` filtering
+1. **Data Isolation:** Legacy database queries must include `user_id` filtering; migrated tables such as prices must filter by `workspace_id`
 2. **Error Handling:** Return errors as JSON with appropriate HTTP status codes
 3. **Transactions:** Use `db.Begin()`, `tx.Commit()`, `tx.Rollback()` for multi-step operations
 4. **Swagger:** Document all endpoints with swag comments
