@@ -11,6 +11,7 @@ UPDATE prices AS p
 SET workspace_id = w.id
 FROM workspaces AS w
 WHERE p.workspace_id IS NULL
+  AND p.deleted_at IS NULL
   AND w.personal_user_id = p.user_id
   AND w.deleted_at IS NULL`
 
@@ -21,8 +22,9 @@ func BackfillPriceWorkspaces(db *gorm.DB) error {
 	}
 
 	var unmapped int64
-	if err := db.Table("prices").
-		Where("workspace_id IS NULL").
+	if err := db.Table("prices AS p").
+		Joins("JOIN users AS u ON u.id = p.user_id AND u.deleted_at IS NULL").
+		Where("p.workspace_id IS NULL AND p.deleted_at IS NULL").
 		Count(&unmapped).Error; err != nil {
 		return err
 	}
