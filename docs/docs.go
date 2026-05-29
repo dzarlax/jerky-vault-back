@@ -778,7 +778,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Search global ingredients by name",
+                "description": "Search global ingredients by name. PostgreSQL deployments also rank typo-tolerant matches using trigram similarity.",
                 "produces": [
                     "application/json"
                 ],
