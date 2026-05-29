@@ -1,7 +1,9 @@
 package controllers
 
 import (
+	"errors"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 	"log"
 	"mobile-backend-go/database"
 	"mobile-backend-go/models"
@@ -51,6 +53,15 @@ func AddPrice(c *gin.Context) {
 	var ingredient models.Ingredient
 	if err := database.DB.First(&ingredient, requestData.IngredientID).Error; err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ingredient ID"})
+		return
+	}
+	if _, err := database.EnsureWorkspaceIngredient(database.DB, workspaceID, requestData.IngredientID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ingredient ID"})
+			return
+		}
+		log.Printf("Failed to link price ingredient to workspace: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to link ingredient to workspace"})
 		return
 	}
 

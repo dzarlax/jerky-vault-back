@@ -39,7 +39,12 @@ func SetupRoutes(router *gin.Engine) {
 		// Ingredient routes
 		protectedRoutes.POST("/ingredients", controllers.CreateIngredient)
 		protectedRoutes.GET("/ingredients", controllers.GetIngredients)
+		protectedRoutes.GET("/ingredients/search", controllers.SearchIngredients)
 		protectedRoutes.GET("/ingredients/check", controllers.CheckIngredientExists)
+		protectedRoutes.GET("/workspace-ingredients", controllers.GetWorkspaceIngredients)
+		protectedRoutes.POST("/workspace-ingredients", controllers.AddWorkspaceIngredient)
+		protectedRoutes.PATCH("/workspace-ingredients/:id", controllers.UpdateWorkspaceIngredient)
+		protectedRoutes.DELETE("/workspace-ingredients/:id", controllers.DeleteWorkspaceIngredient)
 
 		// Recipe ingredient routes
 		protectedRoutes.POST("/recipes/:id/ingredients", controllers.AddIngredientToRecipe)

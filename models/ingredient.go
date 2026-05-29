@@ -17,4 +17,5 @@ type Ingredient struct {
 	RecipeIngredients         []RecipeIngredient         `json:"recipe_ingredients" gorm:"foreignKey:IngredientID"`
 	Prices                    []Price                    `json:"prices" gorm:"foreignKey:IngredientID"`
 	CookingSessionIngredients []CookingSessionIngredient `json:"cooking_session_ingredients" gorm:"foreignKey:IngredientID"`
+	WorkspaceIngredients      []WorkspaceIngredient      `json:"workspace_ingredients,omitempty" gorm:"foreignKey:IngredientID"`
 }
