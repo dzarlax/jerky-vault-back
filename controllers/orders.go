@@ -27,7 +27,7 @@ import (
 // @Failure 500 {object} map[string]string "Internal Server Error"
 // @Router /api/orders/{id} [get]
 func GetOrder(c *gin.Context) {
-	userID := c.MustGet("userID").(uint)
+	workspaceID := c.MustGet("workspaceID").(uint)
 	orderID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid order ID"})
@@ -36,7 +36,7 @@ func GetOrder(c *gin.Context) {
 
 	var order models.Order
 	if err := database.DB.
-		Where("id = ? AND user_id = ?", orderID, userID).
+		Where("id = ? AND workspace_id = ?", orderID, workspaceID).
 		Preload("Client").
 		Preload("Items").
 		Preload("Items.Product").
@@ -60,18 +60,18 @@ func GetOrder(c *gin.Context) {
 // @Failure 500 {object} map[string]string "Internal Server Error"
 // @Router /api/orders [get]
 func GetOrders(c *gin.Context) {
-	userID := c.MustGet("userID").(uint)
+	workspaceID := c.MustGet("workspaceID").(uint)
 
 	var orders []models.Order
 	if err := database.DB.
-		Where("user_id = ?", userID).
+		Where("workspace_id = ?", workspaceID).
 		Preload("Client").
 		Preload("Items").
 		Preload("Items.Product").
 		Preload("Items.Product.Package").
 		Order("date DESC, created_at DESC").
 		Find(&orders).Error; err != nil {
-		log.Printf("Failed to fetch orders for userID %v: %v", userID, err)
+		log.Printf("Failed to fetch orders for workspaceID %v: %v", workspaceID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch orders"})
 		return
 	}
@@ -94,6 +94,7 @@ func GetOrders(c *gin.Context) {
 // @Router /api/orders [post]
 func AddOrder(c *gin.Context) {
 	userID := c.MustGet("userID").(uint)
+	workspaceID := c.MustGet("workspaceID").(uint)
 
 	var requestData struct {
 		ClientID uint      `json:"client_id" binding:"required"`
@@ -150,8 +151,8 @@ func AddOrder(c *gin.Context) {
 
 	// Check client existence and ownership
 	var client models.Client
-	if err := database.DB.Where("id = ? AND user_id = ?", requestData.ClientID, userID).First(&client).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid client ID or client does not belong to user"})
+	if err := database.DB.Where("id = ? AND workspace_id = ?", requestData.ClientID, workspaceID).First(&client).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid client ID or client does not belong to workspace"})
 		return
 	}
 
@@ -162,11 +163,12 @@ func AddOrder(c *gin.Context) {
 
 	// Create order
 	newOrder := models.Order{
-		ClientID: requestData.ClientID,
-		Date:     orderDate,
-		Status:   requestData.Status,
-		Comment:  requestData.Comment,
-		UserID:   userID,
+		ClientID:    requestData.ClientID,
+		Date:        orderDate,
+		Status:      requestData.Status,
+		Comment:     requestData.Comment,
+		UserID:      userID,
+		WorkspaceID: &workspaceID,
 	}
 
 	// Start transaction
@@ -185,9 +187,9 @@ func AddOrder(c *gin.Context) {
 	for _, item := range requestData.Items {
 		// Fetch product for validation and cost
 		var product models.Product
-		if err := tx.Where("id = ? AND user_id = ?", item.ProductID, userID).First(&product).Error; err != nil {
+		if err := tx.Where("id = ? AND workspace_id = ?", item.ProductID, workspaceID).First(&product).Error; err != nil {
 			tx.Rollback()
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid product ID or product does not belong to user"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid product ID or product does not belong to workspace"})
 			return
 		}
 
@@ -252,7 +254,7 @@ func AddOrder(c *gin.Context) {
 // @Failure 500 {object} map[string]string "Internal Server Error"
 // @Router /api/orders/{id} [put]
 func UpdateOrder(c *gin.Context) {
-	userID := c.MustGet("userID").(uint)
+	workspaceID := c.MustGet("workspaceID").(uint)
 	orderID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid order ID"})
@@ -260,7 +262,7 @@ func UpdateOrder(c *gin.Context) {
 	}
 
 	var existingOrder models.Order
-	if err := database.DB.Where("id = ? AND user_id = ?", orderID, userID).Preload("Items").First(&existingOrder).Error; err != nil {
+	if err := database.DB.Where("id = ? AND workspace_id = ?", orderID, workspaceID).Preload("Items").First(&existingOrder).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
 		return
 	}
@@ -315,8 +317,8 @@ func UpdateOrder(c *gin.Context) {
 	}
 
 	var client models.Client
-	if err := database.DB.Where("id = ? AND user_id = ?", requestData.ClientID, userID).First(&client).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid client ID or client does not belong to user"})
+	if err := database.DB.Where("id = ? AND workspace_id = ?", requestData.ClientID, workspaceID).First(&client).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid client ID or client does not belong to workspace"})
 		return
 	}
 
@@ -352,9 +354,9 @@ func UpdateOrder(c *gin.Context) {
 	for _, item := range requestData.Items {
 		// Fetch product to get cost if needed
 		var product models.Product
-		if err := tx.Where("id = ? AND user_id = ?", item.ProductID, userID).First(&product).Error; err != nil {
+		if err := tx.Where("id = ? AND workspace_id = ?", item.ProductID, workspaceID).First(&product).Error; err != nil {
 			tx.Rollback()
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid product ID or product does not belong to user"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid product ID or product does not belong to workspace"})
 			return
 		}
 
@@ -408,7 +410,7 @@ func UpdateOrder(c *gin.Context) {
 // @Failure 500 {object} map[string]string "Internal Server Error"
 // @Router /api/orders/{id}/status [put]
 func UpdateOrderStatus(c *gin.Context) {
-	userID := c.MustGet("userID").(uint)
+	workspaceID := c.MustGet("workspaceID").(uint)
 	orderID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid order ID"})
@@ -433,7 +435,7 @@ func UpdateOrderStatus(c *gin.Context) {
 		return
 	}
 
-	result := database.DB.Model(&models.Order{}).Where("id = ? AND user_id = ?", orderID, userID).Update("status", requestBody.Status)
+	result := database.DB.Model(&models.Order{}).Where("id = ? AND workspace_id = ?", orderID, workspaceID).Update("status", requestBody.Status)
 	if result.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update order status"})
 		return
@@ -459,7 +461,7 @@ func UpdateOrderStatus(c *gin.Context) {
 // @Failure 500 {object} map[string]string "Internal Server Error"
 // @Router /api/orders/{id} [delete]
 func DeleteOrder(c *gin.Context) {
-	userID := c.MustGet("userID").(uint)
+	workspaceID := c.MustGet("workspaceID").(uint)
 	orderID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid order ID"})
@@ -467,7 +469,7 @@ func DeleteOrder(c *gin.Context) {
 	}
 
 	var order models.Order
-	if err := database.DB.Where("id = ? AND user_id = ?", orderID, userID).First(&order).Error; err != nil {
+	if err := database.DB.Where("id = ? AND workspace_id = ?", orderID, workspaceID).First(&order).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
 		return
 	}

@@ -2443,6 +2443,12 @@ const docTemplate = `{
                 },
                 "user_id": {
                     "type": "integer"
+                },
+                "workspace": {
+                    "$ref": "#/definitions/models.Workspace"
+                },
+                "workspace_id": {
+                    "type": "integer"
                 }
             }
         },
@@ -2546,6 +2552,12 @@ const docTemplate = `{
                     "$ref": "#/definitions/models.User"
                 },
                 "user_id": {
+                    "type": "integer"
+                },
+                "workspace": {
+                    "$ref": "#/definitions/models.Workspace"
+                },
+                "workspace_id": {
                     "type": "integer"
                 },
                 "yield": {
@@ -2691,6 +2703,12 @@ const docTemplate = `{
                 },
                 "user_id": {
                     "type": "integer"
+                },
+                "workspace": {
+                    "$ref": "#/definitions/models.Workspace"
+                },
+                "workspace_id": {
+                    "type": "integer"
                 }
             }
         },
@@ -2759,6 +2777,12 @@ const docTemplate = `{
                     "$ref": "#/definitions/models.User"
                 },
                 "user_id": {
+                    "type": "integer"
+                },
+                "workspace": {
+                    "$ref": "#/definitions/models.Workspace"
+                },
+                "workspace_id": {
                     "type": "integer"
                 }
             }
@@ -2909,6 +2933,12 @@ const docTemplate = `{
                 },
                 "user_id": {
                     "type": "integer"
+                },
+                "workspace": {
+                    "$ref": "#/definitions/models.Workspace"
+                },
+                "workspace_id": {
+                    "type": "integer"
                 }
             }
         },
@@ -3003,6 +3033,12 @@ const docTemplate = `{
                     "$ref": "#/definitions/models.User"
                 },
                 "user_id": {
+                    "type": "integer"
+                },
+                "workspace": {
+                    "$ref": "#/definitions/models.Workspace"
+                },
+                "workspace_id": {
                     "type": "integer"
                 }
             }

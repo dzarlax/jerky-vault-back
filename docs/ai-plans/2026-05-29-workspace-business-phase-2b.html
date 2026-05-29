@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Implementation Plan: Workspace Business Tables Phase 2B</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { margin: 0; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f6f7f9; color: #1f2937; line-height: 1.5; }
+    main { max-width: 1120px; margin: 0 auto; padding: 32px; }
+    section { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 16px 0; }
+    h1, h2, h3 { line-height: 1.2; margin-top: 0; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    ul, ol { padding-left: 22px; }
+    li { margin: 6px 0; }
+    .badge { display: inline-block; padding: 4px 10px; border-radius: 999px; background: #e5e7eb; font-size: 12px; font-weight: 600; }
+    .ok { border-left: 4px solid #059669; }
+    .risk { border-left: 4px solid #dc2626; }
+    .approval { border-left: 4px solid #d97706; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+    .card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; background: #fafafa; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Implementation Plan: Workspace Business Tables Phase 2B</h1>
+  <p class="badge">Approval required before implementation</p>
+
+  <section>
+    <h2>Task Summary</h2>
+    <p>
+      Phase 2A migrated <code>prices</code> and recipe cost lookup to workspace scope. Phase 2B should migrate the remaining primary business ownership tables to <code>workspace_id</code> while keeping <code>user_id</code> as creator/audit data for rollback and compatibility.
+    </p>
+    <p>
+      Proposed scope: <code>recipes</code>, <code>packages</code>, <code>products</code>, <code>clients</code>, <code>orders</code>, and <code>cooking_sessions</code>. Detail tables such as <code>recipe_ingredients</code>, <code>product_options</code>, <code>order_items</code>, and <code>cooking_session_ingredients</code> should continue to inherit workspace boundaries through their parent records in this phase.
+    </p>
+  </section>
+
+  <section>
+    <h2>Current Behavior</h2>
+    <div class="grid">
+      <div class="card">
+        <h3>Already Workspace Scoped</h3>
+        <ul>
+          <li><code>prices.workspace_id</code> exists and is backfilled through <code>workspaces.personal_user_id = prices.user_id</code>.</li>
+          <li><code>POST /api/prices</code> writes the active request workspace.</li>
+          <li><code>GET /api/prices</code> filters by active workspace.</li>
+          <li>Recipe cost lookup reads latest prices by <code>workspace_id</code>.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Still User Scoped</h3>
+        <ul>
+          <li><code>recipes</code>, <code>packages</code>, <code>products</code>, <code>clients</code>, <code>orders</code>, and <code>cooking_sessions</code> models have <code>user_id</code> but no <code>workspace_id</code>.</li>
+          <li>Controllers filter these tables with <code>user_id</code>.</li>
+          <li>Dashboard totals and profit queries filter by <code>orders.user_id</code>.</li>
+          <li><code>CreateCookingSession</code> currently accepts a <code>recipe_id</code> without validating recipe ownership.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Desired Behavior</h2>
+    <ul>
+      <li>All primary business records created after this change receive <code>workspace_id</code> from <code>WorkspaceMiddleware</code>.</li>
+      <li>List, detail, update, delete, dashboard, and profit reads use the active workspace as the authorization boundary.</li>
+      <li><code>user_id</code> remains populated as creator/audit data. It is not renamed in this phase.</li>
+      <li>Cross-workspace references are rejected fail-closed: product package, product recipe options, order client, order products, recipe ingredient parent recipe, and cooking session recipe must belong to the active workspace.</li>
+      <li>Join/detail tables do not get direct <code>workspace_id</code> yet; they inherit it through validated parents.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Files Likely to Change</h2>
+    <ul>
+      <li><code>models/recipe.go</code>, <code>models/package.go</code>, <code>models/product.go</code>, <code>models/client.go</code>, <code>models/order.go</code>, <code>models/cooking_session.go</code> - add nullable <code>WorkspaceID</code> and workspace relation.</li>
+      <li><code>database/business_workspaces.go</code> - add fail-closed backfill for the six parent business tables.</li>
+      <li><code>database/database.go</code> - run the new backfill after workspace creation and add workspace indexes.</li>
+      <li><code>controllers/recipes.go</code>, <code>controllers/packages.go</code>, <code>controllers/products.go</code>, <code>controllers/clients.go</code>, <code>controllers/orders.go</code>, <code>controllers/cooking_sessions.go</code>, <code>controllers/recipe_ingredients.go</code>, <code>controllers/dashboard.go</code> - replace ownership filters and reference validation with workspace scoped checks.</li>
+      <li><code>controllers/*_test.go</code> - add behavioral workspace isolation tests using the existing in-memory SQLite test pattern from Phase 2A.</li>
+      <li><code>docs/ai-plans/2026-05-29-workspace-business-phase-2b.html</code> - update after implementation with actual checks and known limitations.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Implementation Steps</h2>
+    <ol>
+      <li>Add nullable <code>workspace_id</code> and <code>Workspace</code> relations to the six parent business models. Keep <code>user_id</code> required where it is currently required.</li>
+      <li>Add a shared backfill helper that maps rows through <code>workspaces.personal_user_id = table.user_id</code> and validates that no active rows remain unmapped after backfill.</li>
+      <li>Add workspace indexes for the migrated tables while keeping existing <code>user_id</code> indexes for rollback and older query paths.</li>
+      <li>Update create paths to set both <code>UserID</code> and <code>WorkspaceID</code>.</li>
+      <li>Update read/update/delete filters from <code>user_id</code> ownership to active <code>workspace_id</code> ownership.</li>
+      <li>Update cross-reference validation: package, recipe, client, product, and order lookups must include active <code>workspace_id</code>.</li>
+      <li>Update dashboard and profit aggregation queries to filter by <code>workspace_id</code>.</li>
+      <li>Regenerate tracked Swagger artifacts if handler/model annotations change. This repository tracks <code>docs/docs.go</code>, <code>docs/swagger.json</code>, and <code>docs/swagger.yaml</code>.</li>
+      <li>Add behavioral tests that prove same-user multi-workspace isolation and cross-workspace rejection.</li>
+      <li>Run local verification, update this plan with actual checks, then commit, push, and open a PR named as Phase 2B.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Per-Controller Audit Checklist</h2>
+    <p>
+      Because this PR touches several ownership paths, every remaining <code>Where("user_id</code> or equivalent <code>user_id = ?</code> in migrated controllers must be resolved before commit. Each occurrence must either be changed to active <code>workspace_id</code> or explicitly documented as creator/audit logic that should still use <code>user_id</code>.
+    </p>
+    <ul>
+      <li><code>controllers/recipes.go</code> - list, detail, create, delete, and cost lookup parent filtering.</li>
+      <li><code>controllers/packages.go</code> - list and create ownership boundary.</li>
+      <li><code>controllers/products.go</code> - list/detail/create/update/delete, package validation, and recipe option validation.</li>
+      <li><code>controllers/clients.go</code> - list/detail/create/update/delete ownership boundary.</li>
+      <li><code>controllers/orders.go</code> - list/detail/create/update/status/delete, client validation, product validation, and order item writes.</li>
+      <li><code>controllers/cooking_sessions.go</code> - list/create ownership boundary and recipe validation before session creation.</li>
+      <li><code>controllers/recipe_ingredients.go</code> - add/delete ingredient routes must validate the parent recipe in the active workspace before mutating detail rows.</li>
+      <li><code>controllers/dashboard.go</code> - totals, pending count, recent orders, distribution, and profit must filter by <code>orders.workspace_id</code> or the relevant parent table <code>workspace_id</code>.</li>
+    </ul>
+    <p>
+      Verification command before commit: <code>rg -n 'user_id|UserID|MustGet\("userID"\)' controllers models database -g "*.go"</code>, followed by a manual pass over every migrated controller hit.
+    </p>
+  </section>
+
+  <section>
+    <h2>Backfill Design</h2>
+    <p>
+      Use the same direct personal workspace mapping that Phase 2A uses for prices. Do not backfill through generic <code>workspace_members</code>, because users can belong to non-personal workspaces.
+    </p>
+    <pre><code>UPDATE recipes r
+SET workspace_id = w.id
+FROM workspaces w
+WHERE r.workspace_id IS NULL
+  AND w.personal_user_id = r.user_id
+  AND w.deleted_at IS NULL;</code></pre>
+    <p>
+      Repeat the pattern for <code>packages</code>, <code>products</code>, <code>clients</code>, <code>orders</code>, and <code>cooking_sessions</code>. The verification query should fail startup only for active rows with non-deleted users that still have <code>workspace_id IS NULL</code>.
+    </p>
+  </section>
+
+  <section>
+    <h2>Test Plan</h2>
+    <ul>
+      <li><code>go test ./...</code> - full Go test suite.</li>
+      <li><code>go vet ./...</code> - static sanity check.</li>
+      <li><code>go build ./...</code> - compile all packages.</li>
+      <li>Backfill string tests: each migrated table uses <code>workspaces.personal_user_id = table.user_id</code>, not membership joins.</li>
+      <li>Controller tests: same user, two workspaces, same logical record type; each API returns only active workspace data.</li>
+      <li>Cross-reference tests: product rejects package or recipe from another workspace; order rejects client or product from another workspace; cooking session rejects recipe from another workspace; recipe ingredient routes reject a recipe from another workspace.</li>
+      <li>Cooking-session behavior test: <code>CreateCookingSession</code> must no longer accept a recipe from outside the active workspace. This is a real behavior change, not just a filter swap.</li>
+      <li>Dashboard tests: totals, recent orders, distribution, and profit use only active workspace orders.</li>
+      <li>Audit test/check: no unresolved migrated-controller <code>user_id</code> filters remain except creator/audit assignments that are intentionally preserved.</li>
+      <li>Manual isolated PostgreSQL startup test: run migrations/backfill on a copied or disposable database and verify active unmapped row counts are zero for all migrated tables.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Manual QA Checklist</h2>
+    <ul>
+      <li>Before switching API filters, seed or verify pre-existing rows with only <code>user_id</code>; after backfill, confirm they remain visible in the user's personal workspace.</li>
+      <li>Create data in personal workspace and a second workspace for the same user.</li>
+      <li>Switch <code>X-Workspace-ID</code> and verify recipes, packages, products, clients, orders, sessions, dashboard, and profit values change accordingly.</li>
+      <li>Verify requests without <code>X-Workspace-ID</code> still resolve to the personal workspace through existing middleware fallback.</li>
+      <li>Attempt cross-workspace IDs in create/update payloads and confirm they are rejected with 400 or 404 rather than silently linking data.</li>
+      <li>For dashboard/profit, verify aggregation filters are applied through parent business tables, especially <code>orders.workspace_id</code>, not through inherited detail rows such as <code>order_items</code>.</li>
+      <li>Confirm production startup logs show migrations, indexes, and backfills completed.</li>
+    </ul>
+  </section>
+
+  <section class="risk">
+    <h2>Risks and Edge Cases</h2>
+    <ul>
+      <li>The broadest risk is mixed boundaries: if one controller path remains on <code>user_id</code>, it can leak same-user data across workspaces. The implementation should audit all controllers that touch migrated tables before commit.</li>
+      <li>Archived rows can have historical invalid references. Backfill validation should fail only on active rows with non-deleted users, matching the Phase 2A production fix.</li>
+      <li>Join/detail rows without direct <code>workspace_id</code> rely on parent validation. Every route that creates or deletes detail records must first verify the parent in the active workspace.</li>
+      <li><code>CreateCookingSession</code> currently lacks recipe ownership validation. Phase 2B should fix that while switching it to workspace validation.</li>
+      <li>Dashboard is the most fragile query surface because it combines counts, joins, grouping, and aggregate revenue/cost calculations. Tests should cover both dashboard and profit endpoints.</li>
+      <li>The public JSON shape will expose <code>workspace_id</code> for newly migrated models unless explicitly hidden. That is acceptable for API clients but should be treated as an API shape change.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Rollback Plan</h2>
+    <ul>
+      <li>Keep <code>user_id</code> on all migrated tables and keep existing <code>user_id</code> indexes.</li>
+      <li>If deployment fails during startup backfill, revert the application image to the previous Phase 2A build. Nullable columns created by AutoMigrate are backward-compatible with the old code.</li>
+      <li>If a controller regression is found after deploy, revert the PR and redeploy. Existing <code>workspace_id</code> values can remain in the database without affecting old code.</li>
+      <li>Do not drop old columns or indexes in Phase 2B.</li>
+    </ul>
+  </section>
+
+  <section class="ok">
+    <h2>Implementation Update</h2>
+    <p><strong>Status:</strong> Implemented after approval on 2026-05-29.</p>
+    <ul>
+      <li>Added nullable <code>workspace_id</code> and <code>Workspace</code> relations to <code>recipes</code>, <code>packages</code>, <code>products</code>, <code>clients</code>, <code>orders</code>, and <code>cooking_sessions</code>.</li>
+      <li>Added <code>BackfillBusinessWorkspaces</code> for the six parent business tables using <code>workspaces.personal_user_id = table.user_id</code>, plus fail-closed active-row validation.</li>
+      <li>Added workspace indexes for migrated business tables while keeping existing <code>user_id</code> indexes.</li>
+      <li>Switched migrated controllers and dashboard/profit queries to active <code>workspace_id</code> boundaries.</li>
+      <li>Kept <code>user_id</code> assignments on create paths as creator/audit data.</li>
+      <li>Added cross-workspace reference rejection for product package/recipe options, order client/products, cooking session recipe, and recipe ingredient parent recipe.</li>
+      <li>Regenerated tracked Swagger artifacts: <code>docs/docs.go</code>, <code>docs/swagger.json</code>, and <code>docs/swagger.yaml</code>.</li>
+    </ul>
+    <h3>Checks Run</h3>
+    <ul>
+      <li><code>go test ./...</code> - passed.</li>
+      <li><code>go vet ./...</code> - passed.</li>
+      <li><code>go build ./...</code> - passed.</li>
+      <li><code>go run github.com/swaggo/swag/cmd/swag@v1.16.3 init -g main.go</code> - passed.</li>
+      <li><code>rg -n 'user_id|UserID|MustGet\("userID"\)|c.Get\("userID"\)' controllers models database -g '*.go'</code> - reviewed. Remaining migrated-controller hits are creator/audit assignments; workspace/workspaces/profile/auth/prices and backfill/index/model hits are expected out-of-scope noise.</li>
+    </ul>
+    <h3>Known Limitations</h3>
+    <ul>
+      <li>Detail tables still do not carry direct <code>workspace_id</code>; they inherit boundaries through validated parents as planned.</li>
+      <li>Production database backfill and live API smoke are still pending and should happen only after PR merge/deploy.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Open Questions</h2>
+    <ul>
+      <li><strong>Scope:</strong> include all six parent business tables in one Phase 2B PR, or split further? Recommendation: include all six because orders, products, clients, recipes, and dashboard references are coupled, but require the per-controller audit checklist above before commit.</li>
+      <li><strong>Detail tables:</strong> add direct <code>workspace_id</code> to <code>product_options</code>, <code>order_items</code>, <code>recipe_ingredients</code>, and <code>cooking_session_ingredients</code>? Recommendation: no for Phase 2B; enforce via parent and keep schema narrower.</li>
+      <li><strong>Creator semantics:</strong> document <code>user_id</code> as creator/audit data for every migrated model? Recommendation: yes, no rename in this phase.</li>
+      <li><strong>Swagger refresh:</strong> regenerate checked-in Swagger docs in the same PR when handler/model annotations change, because this repository tracks <code>docs/docs.go</code>, <code>docs/swagger.json</code>, and <code>docs/swagger.yaml</code>.</li>
+    </ul>
+  </section>
+
+  <section class="approval">
+    <h2>Approval Gate</h2>
+    <p>
+      Implementation must not start until this plan is explicitly approved. After approval, production code changes should happen on the current branch <code>codex/workspace-business-phase-2b-plan</code> or on a fresh implementation branch created from it.
+    </p>
+  </section>
+</main>
+</body>
+</html>

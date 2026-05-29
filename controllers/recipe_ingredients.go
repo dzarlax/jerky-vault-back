@@ -25,7 +25,7 @@ import (
 // @Failure 404 {object} map[string]string "Recipe not found"
 // @Router /api/recipes/{recipe_id}/ingredients [post]
 func AddIngredientToRecipe(c *gin.Context) {
-	userID := c.MustGet("userID").(uint)
+	workspaceID := c.MustGet("workspaceID").(uint)
 	recipeID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid recipe ID"})
@@ -41,7 +41,7 @@ func AddIngredientToRecipe(c *gin.Context) {
 
 	// Verify recipe ownership
 	var recipe models.Recipe
-	if err := database.DB.Where("id = ? AND user_id = ?", recipeID, userID).First(&recipe).Error; err != nil {
+	if err := database.DB.Where("id = ? AND workspace_id = ?", recipeID, workspaceID).First(&recipe).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Recipe not found"})
 		return
 	}
@@ -87,7 +87,7 @@ func AddIngredientToRecipe(c *gin.Context) {
 // @Failure 404 {object} map[string]string "Recipe or Ingredient not found"
 // @Router /api/recipes/{recipe_id}/ingredients/{ingredient_id} [delete]
 func DeleteIngredientFromRecipe(c *gin.Context) {
-	userID := c.MustGet("userID").(uint)
+	workspaceID := c.MustGet("workspaceID").(uint)
 	recipeID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid recipe ID"})
@@ -100,7 +100,7 @@ func DeleteIngredientFromRecipe(c *gin.Context) {
 	}
 
 	var recipe models.Recipe
-	if err := database.DB.Where("id = ? AND user_id = ?", recipeID, userID).First(&recipe).Error; err != nil {
+	if err := database.DB.Where("id = ? AND workspace_id = ?", recipeID, workspaceID).First(&recipe).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Recipe not found"})
 		return
 	}

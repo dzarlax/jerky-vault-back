@@ -19,7 +19,9 @@ type Recipe struct {
 	DeletedAt         gorm.DeletedAt     `json:"deleted_at,omitempty" gorm:"index" swaggerignore:"true"`
 	Name              string             `json:"name" gorm:"not null" binding:"required,min=1"`
 	UserID            uint               `json:"user_id" gorm:"not null"`
+	WorkspaceID       *uint              `json:"workspace_id,omitempty"`
 	User              User               `json:"user" gorm:"foreignKey:UserID"`
+	Workspace         Workspace          `json:"workspace" gorm:"foreignKey:WorkspaceID"`
 	RecipeIngredients []RecipeIngredient `json:"recipe_ingredients" gorm:"foreignKey:RecipeID"`
 	CookingSessions   []CookingSession   `json:"cooking_sessions" gorm:"foreignKey:RecipeID"`
 	ProductOptions    []ProductOption    `json:"product_options" gorm:"foreignKey:RecipeID"`

@@ -17,8 +17,10 @@ type Product struct {
 	Cost        float64         `json:"cost" gorm:"not null" binding:"min=0"`
 	Image       string          `json:"image"`
 	UserID      uint            `json:"user_id"`
+	WorkspaceID *uint           `json:"workspace_id,omitempty"`
 	PackageID   uint            `json:"package_id"` // Add this field
 	User        User            `json:"user" gorm:"foreignKey:UserID"`
+	Workspace   Workspace       `json:"workspace" gorm:"foreignKey:WorkspaceID"`
 	Options     []ProductOption `json:"options" gorm:"foreignKey:ProductID"`
 	Package     Package         `json:"package" gorm:"foreignKey:PackageID"` // Add this field if you need to load package data
 }
