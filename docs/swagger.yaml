@@ -375,6 +375,10 @@ definitions:
         $ref: '#/definitions/models.User'
       user_id:
         type: integer
+      workspace:
+        $ref: '#/definitions/models.Workspace'
+      workspace_id:
+        type: integer
     required:
     - date
     - ingredient_id
@@ -1462,8 +1466,12 @@ paths:
       - Packages
   /api/prices:
     get:
-      description: Get all prices with optional filters
+      description: Get all prices for the current workspace with optional filters
       parameters:
+      - description: Workspace ID
+        in: header
+        name: X-Workspace-ID
+        type: integer
       - description: Ingredient ID
         in: query
         name: ingredient_id
@@ -1511,6 +1519,10 @@ paths:
       - application/json
       description: Add a new price for an ingredient
       parameters:
+      - description: Workspace ID
+        in: header
+        name: X-Workspace-ID
+        type: integer
       - description: Price data
         in: body
         name: price
@@ -1738,6 +1750,10 @@ paths:
       description: Get all recipes available for the authenticated user with optional
         filtering by recipe_id and ingredient_id
       parameters:
+      - description: Workspace ID
+        in: header
+        name: X-Workspace-ID
+        type: integer
       - description: Filter by Recipe ID
         example: 1
         in: query
@@ -1857,6 +1873,10 @@ paths:
     get:
       description: Get a recipe by its ID for the authenticated user
       parameters:
+      - description: Workspace ID
+        in: header
+        name: X-Workspace-ID
+        type: integer
       - description: Recipe ID
         in: path
         name: id

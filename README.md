@@ -144,7 +144,7 @@ All API endpoints except `/api/auth/register` and `/api/auth/login` require auth
 
 **Header format:** `Authorization: Bearer <your_token>`
 
-Protected routes also resolve workspace context. Clients may send `X-Workspace-ID: <id>` to select a workspace. If the header is omitted or blank, the backend uses the user's default personal workspace. The current foundation phase keeps existing business records scoped by `user_id`; later migrations will move operational data to `workspace_id`.
+Protected routes also resolve workspace context. Clients may send `X-Workspace-ID: <id>` to select a workspace. If the header is omitted or blank, the backend uses the user's default personal workspace. Prices are scoped by `workspace_id`; most other legacy business records are still scoped by `user_id` until later migrations.
 
 **Login Response:**
 ```json
@@ -229,7 +229,7 @@ The API validates all input data:
 2. All comments and documentation must be in English
 3. All new endpoints must be documented via Swagger
 4. Database changes must use GORM auto-migration
-5. Existing legacy business data must be filtered by `user_id` until the table is migrated to `workspace_id`
+5. Existing legacy business data must be filtered by `user_id` until the table is migrated to `workspace_id`; prices are already workspace-scoped
 6. New workspace-aware code must validate workspace membership and use `workspaceID` from request context
 
 ### Generating Swagger Documentation
@@ -240,7 +240,7 @@ swag init -g main.go
 ## Security Best Practices
 
 1. **Always validate input data** - Use binding tags and custom validation
-2. **Filter by owner scope** - Legacy business queries still filter by `user_id`; workspace-aware queries must filter by `workspace_id` after membership validation
+2. **Filter by owner scope** - Legacy business queries still filter by `user_id`; workspace-aware queries, including prices, must filter by `workspace_id` after membership validation
 3. **Use transactions** - For multi-step database operations
 4. **Never log sensitive data** - Don't log passwords, tokens, or personal info
 5. **Validate JWT_SECRET** - Minimum 16 characters for security
@@ -250,6 +250,7 @@ swag init -g main.go
 
 The application automatically creates indexes on startup for optimal query performance:
 - Workspaces: `personal_user_id`, membership lookup, unique active membership
+- Prices: `workspace_id`, `workspace_id + ingredient_id + date`, plus legacy ingredient/date indexes
 - Orders: `user_id`, `client_id`, `status`, `created_at`, composite indexes
 - Products: `user_id`, `package_id`
 - And more...

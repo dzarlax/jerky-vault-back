@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Implementation Plan: Workspace Price Migration Phase 2</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      --bg: #f6f7f9;
+      --panel: #ffffff;
+      --text: #1f2937;
+      --muted: #5b6472;
+      --border: #d8e0ea;
+      --accent: #2563eb;
+      --warn: #b45309;
+      --risk: #b91c1c;
+      --ok: #047857;
+      --code: #eef2f7;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+    main {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 32px;
+    }
+
+    header {
+      margin-bottom: 20px;
+    }
+
+    section {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      margin: 16px 0;
+    }
+
+    h1, h2, h3 {
+      line-height: 1.2;
+      margin: 0 0 12px;
+    }
+
+    h1 { font-size: 32px; }
+    h2 { font-size: 20px; }
+    h3 { font-size: 16px; }
+    p { margin: 0 0 12px; }
+
+    ul, ol {
+      margin: 8px 0 0;
+      padding-left: 22px;
+    }
+
+    li { margin: 6px 0; }
+
+    code {
+      background: var(--code);
+      padding: 2px 5px;
+      border-radius: 4px;
+      font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+      font-size: 0.95em;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      font-size: 14px;
+    }
+
+    th, td {
+      border: 1px solid var(--border);
+      padding: 8px 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th { background: #f8fafc; }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: #e8eef8;
+      color: #1e3a8a;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .badge.warn {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 12px;
+    }
+
+    .note { border-left: 4px solid var(--accent); }
+    .risk { border-left: 4px solid var(--risk); }
+    .approval { border-left: 4px solid var(--warn); }
+    .muted { color: var(--muted); }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Implementation Plan: Workspace Price Migration Phase 2</h1>
+    <p>This plan covers the next safe backend slice after the merged workspace foundation PR.</p>
+    <div class="meta">
+      <span class="badge">Date: 2026-05-29</span>
+      <span class="badge">Branch: codex/workspace-price-phase-2-plan</span>
+      <span class="badge">Latest PR reviewed: #4, merged 2026-05-29</span>
+      <span class="badge warn">Approval required before implementation</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>Task Summary</h2>
+    <p>Phase 2 in Todoist is described as migrating business tables to <code>workspace_id</code>. The freshest merged PR, #4, recommends starting that migration with <code>prices</code>, then recipe cost paths, before moving the rest of the operational tables. This plan intentionally scopes the next implementation PR to that first executable slice: add and backfill <code>prices.workspace_id</code>, read and write prices by current workspace, and update recipe cost calculations to use workspace-scoped latest prices.</p>
+    <p>Recipes, products, packages, clients, orders, and cooking sessions remain on <code>user_id</code> in this slice. They should be migrated in later Phase 2 slices after price behavior is verified.</p>
+  </section>
+
+  <section>
+    <h2>Inputs Reviewed</h2>
+    <ul>
+      <li>Todoist <code>Pet projects</code> backlog contains <code>BatchVault: Phase 2 - migrate business tables to workspace_id</code>, plus Phase 1, Phase 3, and Phase 4 roadmap tasks.</li>
+      <li>Latest GitHub PR is <code>#4 [codex] Add workspace foundation</code>, merged on 2026-05-29.</li>
+      <li>PR #4 added <code>workspaces</code>, <code>workspace_members</code>, <code>WorkspaceMiddleware()</code>, <code>GET /api/workspaces</code>, and <code>GET /api/workspaces/current</code>.</li>
+      <li>PR #4 follow-up states: migrate <code>prices</code> first, then recipe cost paths and ingredient workspace membership in later PRs.</li>
+      <li><code>docs/workspace-model-handover.md</code> says the largest migration risk is mixing <code>user_id</code> and <code>workspace_id</code> inside one workflow.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Current Behavior</h2>
+    <ul>
+      <li>Protected requests now have <code>userID</code>, <code>workspaceID</code>, <code>workspaceRole</code>, and <code>workspace</code> in Gin context.</li>
+      <li><code>models.Price</code> has <code>user_id</code> and <code>ingredient_id</code>, but no <code>workspace_id</code>.</li>
+      <li><code>controllers/prices.go</code> creates and lists prices with <code>user_id</code> filtering.</li>
+      <li><code>controllers/recipes.go</code> loads latest ingredient prices by <code>ingredient_id</code> and <code>user_id</code> for recipe total cost calculation.</li>
+      <li><code>ingredients</code> remain a shared global dictionary, and <code>GET /api/ingredients</code> still returns all ingredients.</li>
+      <li><code>database.ConnectDatabase()</code> uses GORM AutoMigrate plus explicit index creation and startup backfills.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Desired Behavior</h2>
+    <ul>
+      <li>Add nullable <code>prices.workspace_id</code> while keeping <code>prices.user_id</code> for rollback and audit.</li>
+      <li>Backfill each existing price row to the personal workspace for its current <code>user_id</code>.</li>
+      <li>New price writes set both <code>workspace_id</code> from request context and <code>user_id</code> as the creating identity.</li>
+      <li>Price reads use <code>workspace_id</code> as the primary data boundary.</li>
+      <li>Recipe cost calculation uses the latest price in the current workspace.</li>
+      <li>Existing clients that do not send <code>X-Workspace-ID</code> continue to work through default personal workspace fallback.</li>
+      <li>Do not add <code>WorkspaceIngredient</code> yet. Price creation may reference any valid global ingredient until Phase 3 adds membership enforcement.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Scope Boundary</h2>
+    <div class="grid">
+      <div>
+        <h3>In Scope</h3>
+        <ul>
+          <li><code>Price.WorkspaceID</code> model field and migration.</li>
+          <li>Backfill existing prices from <code>user_id</code> to personal workspace.</li>
+          <li>Workspace-scoped price list and create behavior.</li>
+          <li>Workspace-scoped latest price lookup in recipe responses.</li>
+          <li>Indexes for workspace price lookup.</li>
+          <li>Focused tests around migration and workspace isolation.</li>
+          <li>Docs and Swagger updates for price workspace behavior.</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Out of Scope</h3>
+        <ul>
+          <li class="muted">Adding <code>workspace_id</code> to recipes, products, packages, clients, orders, or cooking sessions.</li>
+          <li class="muted">Changing global ingredient list behavior.</li>
+          <li class="muted">Adding <code>workspace_ingredients</code> or ingredient membership enforcement.</li>
+          <li class="muted">Dropping or renaming <code>prices.user_id</code>.</li>
+          <li class="muted">Adding workspace creation or member-management endpoints.</li>
+          <li class="muted">Frontend workspace selector changes.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Files Likely to Change</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>File</th>
+          <th>Reason</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>models/price.go</code></td>
+          <td>Add nullable <code>WorkspaceID</code> and <code>Workspace</code> relation. Keep <code>UserID</code> for creator/rollback semantics.</td>
+        </tr>
+        <tr>
+          <td><code>database/database.go</code></td>
+          <td>Create workspace price indexes and invoke an idempotent price workspace backfill after workspace backfill.</td>
+        </tr>
+        <tr>
+          <td><code>database/price_workspaces.go</code></td>
+          <td>Add explicit backfill logic from each price row's <code>user_id</code> to that user's personal workspace.</td>
+        </tr>
+        <tr>
+          <td><code>controllers/prices.go</code></td>
+          <td>Read <code>workspaceID</code> from context, write it on new prices, and filter <code>GET /api/prices</code> by workspace.</td>
+        </tr>
+        <tr>
+          <td><code>controllers/recipes.go</code></td>
+          <td>Change latest price lookup for recipe cost calculation from <code>user_id</code> to <code>workspace_id</code>.</td>
+        </tr>
+        <tr>
+          <td><code>controllers/*_test.go</code> or new focused tests</td>
+          <td>Add tests proving prices and recipe costs are isolated by workspace when two workspaces have different prices for the same ingredient.</td>
+        </tr>
+        <tr>
+          <td><code>README.md</code>, <code>CLAUDE.md</code>, <code>API_DOCUMENTATION.md</code>, <code>docs/*</code></td>
+          <td>Update docs after implementation. Regenerate Swagger if endpoint annotations or response schemas change.</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Proposed Implementation Steps</h2>
+    <ol>
+      <li>Add <code>WorkspaceID *uint</code> to <code>models.Price</code>, plus a workspace relation if useful for preload consistency.</li>
+      <li>Run AutoMigrate through the existing startup migration path so <code>prices.workspace_id</code> is added as nullable.</li>
+      <li>Add indexes:
+        <ul>
+          <li><code>idx_prices_workspace_id</code> on <code>prices(workspace_id)</code>.</li>
+          <li><code>idx_prices_workspace_ingredient_date</code> on <code>prices(workspace_id, ingredient_id, date DESC)</code>.</li>
+          <li>Keep existing <code>ingredient_id</code> and <code>date</code> indexes during the transition.</li>
+        </ul>
+      </li>
+      <li>Add an idempotent backfill:
+        <ul>
+          <li>Find prices where <code>workspace_id IS NULL</code>.</li>
+          <li>Map each row directly through <code>workspaces.personal_user_id = prices.user_id</code>. Do not choose through generic workspace membership, because a user can belong to non-personal workspaces too.</li>
+          <li>Update <code>prices.workspace_id</code> only when a matching personal workspace exists.</li>
+          <li>Fail startup if any legacy price remains without a workspace after backfill, because price reads will switch to workspace filtering.</li>
+        </ul>
+      </li>
+      <li>Update <code>AddPrice</code>:
+        <ul>
+          <li>Require <code>workspaceID</code> from context.</li>
+          <li>Set <code>WorkspaceID</code> to the current workspace.</li>
+          <li>Keep <code>UserID</code> as the creator identity.</li>
+          <li>Continue validating that <code>ingredient_id</code> exists globally.</li>
+        </ul>
+      </li>
+      <li>Update <code>GetPrices</code> to filter by current <code>workspace_id</code> instead of <code>user_id</code>. Keep existing query parameters and sorting behavior unless a test exposes a bug.</li>
+      <li>Update recipe cost lookups in <code>GetRecipes</code> and <code>GetRecipe</code> to fetch latest price by <code>ingredient_id</code> plus current <code>workspace_id</code>.</li>
+      <li>Keep recipe ownership on <code>user_id</code> in this slice. The expected Phase 2A behavior is mixed but intentional: a user sees only their own recipes, while recipe cost uses the active workspace's price history.</li>
+      <li>Add focused tests for workspace isolation:
+        <ul>
+          <li>Two workspaces can have different prices for the same ingredient.</li>
+          <li><code>GET /api/prices</code> only returns prices for the selected workspace.</li>
+          <li>Recipe total cost changes when the same recipe is viewed under a workspace with a different latest ingredient price.</li>
+          <li>When the active workspace has no price for a recipe ingredient, the current behavior remains explicit in tests: no latest price is attached and the calculated ingredient cost stays zero.</li>
+          <li>Missing <code>X-Workspace-ID</code> still uses the personal workspace fallback.</li>
+        </ul>
+      </li>
+      <li>Update docs and generated Swagger artifacts after implementation.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Data, API, Auth, and Deployment Impact</h2>
+    <ul>
+      <li>Data: adds one nullable column to <code>prices</code> and backfills existing rows. No data is deleted.</li>
+      <li>API: <code>GET /api/prices</code> and <code>POST /api/prices</code> keep the same paths and request shapes. Behavior changes from user-scoped to workspace-scoped.</li>
+      <li>Auth: no JWT changes. Workspace membership is already validated by <code>WorkspaceMiddleware()</code>.</li>
+      <li>Permissions: no role-specific write restriction in this slice; any member who could call the endpoint before can still call it.</li>
+      <li>Audit semantics: <code>prices.user_id</code> remains in place and should be documented as the creating user field for Phase 2A, not the price ownership boundary.</li>
+      <li>Deployment: startup migration must be verified against a non-production schema first. Backfill should be repeatable and fail closed if legacy price rows cannot be mapped.</li>
+      <li>Rollback: old code can ignore the added nullable column. Keeping <code>user_id</code> preserves the previous boundary if rollback is needed.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Test Plan</h2>
+    <ul>
+      <li><code>go test ./...</code></li>
+      <li><code>go vet ./...</code></li>
+      <li><code>go build ./...</code></li>
+      <li>Run the backend against an isolated PostgreSQL schema and verify:
+        <ul>
+          <li><code>prices.workspace_id</code> exists.</li>
+          <li>No legacy price row has <code>workspace_id IS NULL</code> after startup.</li>
+          <li>Duplicate startup runs do not change counts unexpectedly.</li>
+          <li>The new workspace price index exists.</li>
+        </ul>
+      </li>
+      <li>API smoke:
+        <ul>
+          <li>Create a price without <code>X-Workspace-ID</code> and confirm it lands in the personal workspace.</li>
+          <li>Create a price with a valid workspace header and confirm it lands in that workspace.</li>
+          <li>Read prices under two different workspace headers and confirm the result sets differ correctly.</li>
+          <li>Check a recipe response under each workspace when the same ingredient has different latest prices.</li>
+        </ul>
+      </li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Manual QA Checklist</h2>
+    <ul>
+      <li>Login through the current frontend and confirm price screens still load without explicit workspace selection.</li>
+      <li>Create a price from the current frontend and verify it appears in <code>GET /api/prices</code>.</li>
+      <li>Call <code>GET /api/workspaces/current</code> and use its id in <code>X-Workspace-ID</code> for explicit price reads.</li>
+      <li>Verify recipe cost totals still render and use the newly created workspace price.</li>
+      <li>Smoke check ingredients list remains unchanged, because workspace ingredients are Phase 3.</li>
+    </ul>
+  </section>
+
+  <section class="risk">
+    <h2>Risks and Edge Cases</h2>
+    <ul>
+      <li>Mixed boundary risk: prices move to <code>workspace_id</code> while recipes still belong to <code>user_id</code>. Mitigation: only change recipe price lookup, not recipe ownership, and test the cost path explicitly.</li>
+      <li>Backfill risk: a legacy price row with a missing or deleted user cannot map to a personal workspace. Mitigation: fail startup in the isolated verification environment and inspect rows before production deploy.</li>
+      <li>Nil workspace risk: nullable column is needed for safe migration, but application reads should not tolerate null after backfill. Mitigation: use startup verification and tests before filtering by workspace.</li>
+      <li>Mixed recipe boundary risk: recipes remain scoped by <code>user_id</code>, but cost lookup uses <code>workspace_id</code>. This is expected for Phase 2A, but it means selecting a different workspace can change costs without changing the recipe list.</li>
+      <li>Global ingredient risk: any workspace can still price any global ingredient until Phase 3. Mitigation: document this as intentional transitional behavior.</li>
+      <li>Sort risk: <code>ingredient_name</code> and <code>ingredient_type</code> are currently listed as valid sort columns but the price query does not join ingredients for SQL ordering. Mitigation: avoid broad sort refactor unless tests show this path is broken in current behavior.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Rollback Plan</h2>
+    <ul>
+      <li>Redeploy the previous backend image if the price migration code misbehaves.</li>
+      <li>Leave <code>prices.workspace_id</code> in place during rollback; old code ignores it.</li>
+      <li>Do not drop <code>prices.user_id</code> or existing user indexes in this slice.</li>
+      <li>If a later cleanup is required, drop only the new price workspace indexes and column after confirming no newer branch depends on them.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Open Questions</h2>
+    <ol>
+      <li>Should the next implementation PR be named and described as <code>Phase 2A</code> to avoid implying that all business tables are migrated at once?</li>
+      <li>Should startup fail when a price cannot be backfilled, or should it log and keep those rows invisible until manual repair? This plan recommends fail-closed during deployment verification. With direct <code>personal_user_id</code> mapping, the expected unmapped edge is an orphaned price whose user no longer has a resolvable personal workspace.</li>
+      <li>Should price creation auto-add a future <code>workspace_ingredients</code> membership once Phase 3 exists, or should membership stay an explicit frontend action?</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Decisions</h2>
+    <ul>
+      <li>Name the next implementation PR as <code>Phase 2A</code>, because it migrates prices and recipe cost lookups only.</li>
+      <li>Document <code>prices.user_id</code> as creator/audit semantics during Phase 2A. Do not rename the database column in this slice.</li>
+    </ul>
+  </section>
+
+  <section class="approval">
+    <h2>Approval Gate</h2>
+    <p>Implementation must not start until this plan is explicitly approved. The recommended approval is for a narrow Phase 2A PR: migrate <code>prices</code> and recipe cost lookups to workspace scope, keep the rest of the business tables on <code>user_id</code>, and defer workspace ingredients to Phase 3.</p>
+  </section>
+
+  <section>
+    <h2>Implementation Notes</h2>
+    <ul>
+      <li>Implemented on branch <code>codex/workspace-price-phase-2-plan</code> after approval.</li>
+      <li>Added nullable <code>prices.workspace_id</code> through <code>models.Price</code> while keeping <code>prices.user_id</code> as the creating user/audit field.</li>
+      <li>Added price workspace indexes: <code>idx_prices_workspace_id</code> and <code>idx_prices_workspace_ingredient_date</code>.</li>
+      <li>Added idempotent price backfill using direct <code>workspaces.personal_user_id = prices.user_id</code> mapping, followed by a fail-closed unmapped-row check.</li>
+      <li>Changed <code>POST /api/prices</code> to write the resolved request <code>workspaceID</code>.</li>
+      <li>Changed <code>GET /api/prices</code> to filter by the resolved request <code>workspaceID</code>.</li>
+      <li>Changed recipe cost latest-price lookup in <code>GetRecipes</code> and <code>GetRecipe</code> from <code>user_id</code> to <code>workspace_id</code>.</li>
+      <li>Added controller behavior tests using an in-memory pure-Go SQLite test database for workspace price isolation, workspace-specific recipe costs, and the no-price workspace edge.</li>
+      <li>Regenerated Swagger docs with <code>go run github.com/swaggo/swag/cmd/swag@v1.16.3 init -g main.go</code> because the local <code>swag</code> command was not installed.</li>
+      <li>Updated backend docs to describe price workspace scope and <code>prices.user_id</code> creator/audit semantics.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Checks Run</h2>
+    <ul>
+      <li><code>go test ./...</code> passed.</li>
+      <li><code>go vet ./...</code> passed.</li>
+      <li><code>go build ./...</code> passed.</li>
+      <li>Direct <code>go run .</code> startup smoke passed against isolated schema <code>workspace_foundation_dev</code>.</li>
+      <li><code>docker compose -f docker-compose.dev.yml up -d backend</code> passed from the frontend repo after stopping the earlier direct <code>go run</code> process that held port 8080.</li>
+      <li>Docker backend logs showed <code>Indexes created successfully</code> and <code>Migrations completed successfully</code>.</li>
+      <li>PostgreSQL schema check passed: <code>prices.workspace_id</code> exists, <code>prices.workspace_id IS NULL</code> count is 0, and both workspace price indexes exist.</li>
+      <li><code>controllers/workspace_price_test.go</code> covers two workspaces with different prices for the same ingredient, <code>GET /api/prices</code> workspace filtering, recipe cost changes by active workspace, and the no-price workspace edge.</li>
+      <li>API smoke passed: a new test user's personal workspace price and second workspace price for the same ingredient stayed isolated in <code>GET /api/prices</code>.</li>
+      <li>API recipe smoke passed: the same user-owned recipe returned different totals under two workspace headers, matching each workspace's latest price.</li>
+      <li>No-price edge smoke passed: viewing a recipe under a workspace with no price for the ingredient returned <code>total_cost = 0</code> and no attached latest price.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Known Limitations and Follow-up</h2>
+    <ul>
+      <li>Recipes, products, packages, clients, orders, and cooking sessions still use <code>user_id</code> ownership and need later Phase 2 slices.</li>
+      <li>Ingredient workspace membership remains Phase 3. During Phase 2A, a workspace can still create prices for any global ingredient.</li>
+      <li><code>ingredient_name</code> and <code>ingredient_type</code> remain accepted sort names in <code>GET /api/prices</code>, but the existing query still does not join ingredients for SQL sorting by those fields.</li>
+      <li>The Docker/API smoke created test rows in the isolated dev schema only.</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>

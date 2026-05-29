@@ -16,6 +16,7 @@ import (
 // @Security BearerAuth
 // @Accept  json
 // @Produce  json
+// @Param X-Workspace-ID header int false "Workspace ID"
 // @Param price body models.PriceCreateDTO true "Price data"
 // @Success 201 {object} models.Price
 // @Failure 400 {object} map[string]string "Bad request"
@@ -34,6 +35,7 @@ func AddPrice(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
+	workspaceID := c.MustGet("workspaceID").(uint)
 
 	// Create Price model from DTO
 	newPrice := models.Price{
@@ -43,6 +45,7 @@ func AddPrice(c *gin.Context) {
 		Unit:         requestData.Unit,
 		Date:         requestData.Date,
 		UserID:       userID.(uint),
+		WorkspaceID:  &workspaceID,
 	}
 
 	var ingredient models.Ingredient
@@ -70,12 +73,13 @@ func AddPrice(c *gin.Context) {
 	c.JSON(http.StatusCreated, newPrice)
 }
 
-// GetPrices returns list of all prices
+// GetPrices returns list of workspace prices
 // @Summary Get list of prices
-// @Description Get all prices with optional filters
+// @Description Get all prices for the current workspace with optional filters
 // @Tags Prices
 // @Security BearerAuth
 // @Produce  json
+// @Param X-Workspace-ID header int false "Workspace ID"
 // @Param ingredient_id query int false "Ingredient ID"
 // @Param date query string false "Date in YYYY-MM-DD format"
 // @Param sort_column query string false "Column to sort by"
@@ -89,11 +93,11 @@ func GetPrices(c *gin.Context) {
 	query := database.DB
 
 	// Get userID from context
-	userID, exists := c.Get("userID")
-	if !exists {
+	if _, exists := c.Get("userID"); !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
+	workspaceID := c.MustGet("workspaceID").(uint)
 
 	ingredientID := c.Query("ingredient_id")
 	date := c.Query("date")
@@ -104,7 +108,7 @@ func GetPrices(c *gin.Context) {
 	validSortDirections := map[string]bool{"ASC": true, "DESC": true}
 
 	// Apply filters
-	query = query.Where("user_id = ?", userID)
+	query = query.Where("workspace_id = ?", workspaceID)
 	if ingredientID != "" {
 		query = query.Where("ingredient_id = ?", ingredientID)
 	}
