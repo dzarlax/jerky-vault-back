@@ -52,6 +52,9 @@ func setupWorkspaceIngredientTest(t *testing.T) workspaceIngredientFixture {
 	); err != nil {
 		t.Fatalf("migrate test database: %v", err)
 	}
+	if err := db.Exec(`CREATE UNIQUE INDEX idx_workspace_ingredients_test_unique ON workspace_ingredients(workspace_id, ingredient_id) WHERE deleted_at IS NULL`).Error; err != nil {
+		t.Fatalf("create workspace ingredient unique index: %v", err)
+	}
 	database.DB = db
 
 	user := models.User{Username: "phase3a-test", Password: "hashed"}
@@ -376,6 +379,30 @@ func TestWorkspaceIngredientEndpointsManageMembership(t *testing.T) {
 	if err := database.DB.First(&globalIngredient, fixture.GlobalIngredient.ID).Error; err != nil {
 		t.Fatalf("global ingredient was deleted: %v", err)
 	}
+}
+
+func TestEnsureWorkspaceIngredientIsConcurrentSafe(t *testing.T) {
+	fixture := setupWorkspaceIngredientTest(t)
+
+	const workers = 8
+	errCh := make(chan error, workers)
+	for range workers {
+		go func() {
+			_, err := database.EnsureWorkspaceIngredient(
+				database.DB,
+				fixture.SecondWorkspace.ID,
+				fixture.GlobalIngredient.ID,
+			)
+			errCh <- err
+		}()
+	}
+
+	for range workers {
+		if err := <-errCh; err != nil {
+			t.Fatalf("ensure workspace ingredient concurrently: %v", err)
+		}
+	}
+	assertWorkspaceIngredientCount(t, fixture.SecondWorkspace.ID, fixture.GlobalIngredient.ID, 1)
 }
 
 func TestPriceAndRecipeWritesRejectInvalidIngredientIDs(t *testing.T) {

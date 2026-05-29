@@ -100,6 +100,13 @@ func EnsureWorkspaceIngredient(db *gorm.DB, workspaceID uint, ingredientID uint)
 		Active:       true,
 	}
 	if err := db.Create(&workspaceIngredient).Error; err != nil {
+		var existing models.WorkspaceIngredient
+		if lookupErr := db.
+			Where("workspace_id = ? AND ingredient_id = ? AND active = ?", workspaceID, ingredientID, true).
+			Preload("Ingredient").
+			First(&existing).Error; lookupErr == nil {
+			return &existing, nil
+		}
 		return nil, err
 	}
 	if err := db.Preload("Ingredient").First(&workspaceIngredient, workspaceIngredient.ID).Error; err != nil {
