@@ -10,7 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func validateRecipeOwnership(recipeIDs []uint, userID uint) error {
+func validateRecipeWorkspace(recipeIDs []uint, workspaceID uint) error {
 	if len(recipeIDs) == 0 {
 		return nil
 	}
@@ -30,12 +30,12 @@ func validateRecipeOwnership(recipeIDs []uint, userID uint) error {
 
 	var count int64
 	if err := database.DB.Model(&models.Recipe{}).
-		Where("user_id = ? AND id IN ?", userID, ids).
+		Where("workspace_id = ? AND id IN ?", workspaceID, ids).
 		Count(&count).Error; err != nil {
 		return err
 	}
 	if count != int64(len(ids)) {
-		return fmt.Errorf("invalid recipe ID or recipe does not belong to user")
+		return fmt.Errorf("invalid recipe ID or recipe does not belong to workspace")
 	}
 
 	return nil
@@ -52,19 +52,12 @@ func validateRecipeOwnership(recipeIDs []uint, userID uint) error {
 // @Router /api/products [get]
 func GetProducts(c *gin.Context) {
 	var products []models.Product
+	workspaceID := c.MustGet("workspaceID").(uint)
 
-	// Get userID from context
-	userID, exists := c.Get("userID")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-		return
-	}
-
-	// Apply filter by userID and preload options and package
 	if err := database.DB.
 		Preload("Options").
 		Preload("Package").
-		Where("user_id = ?", userID).
+		Where("workspace_id = ?", workspaceID).
 		Find(&products).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch products"})
 		return
@@ -93,12 +86,7 @@ func GetProductByID(c *gin.Context) {
 		return
 	}
 
-	// Get userID from context
-	userID, exists := c.Get("userID")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-		return
-	}
+	workspaceID := c.MustGet("workspaceID").(uint)
 
 	var product models.Product
 
@@ -106,7 +94,7 @@ func GetProductByID(c *gin.Context) {
 	if err := database.DB.
 		Preload("Options").
 		Preload("Package").
-		Where("id = ? AND user_id = ?", productID, userID).
+		Where("id = ? AND workspace_id = ?", productID, workspaceID).
 		First(&product).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Product not found"})
 		return
@@ -164,14 +152,15 @@ func CreateProduct(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
+	workspaceID := c.MustGet("workspaceID").(uint)
 
 	// Check package existence and ownership
 	var existingPackage models.Package
-	if err := database.DB.Where("id = ? AND user_id = ?", requestData.PackageID, userID).First(&existingPackage).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid Package ID or package does not belong to user"})
+	if err := database.DB.Where("id = ? AND workspace_id = ?", requestData.PackageID, workspaceID).First(&existingPackage).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid Package ID or package does not belong to workspace"})
 		return
 	}
-	if err := validateRecipeOwnership(requestData.RecipeIDs, userID.(uint)); err != nil {
+	if err := validateRecipeWorkspace(requestData.RecipeIDs, workspaceID); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -184,6 +173,7 @@ func CreateProduct(c *gin.Context) {
 		Cost:        requestData.Cost,
 		Image:       "",
 		UserID:      userID.(uint),
+		WorkspaceID: &workspaceID,
 		PackageID:   requestData.PackageID,
 	}
 
@@ -301,21 +291,22 @@ func UpdateProduct(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
+	workspaceID := c.MustGet("workspaceID").(uint)
 
 	// Check product existence
 	var existingProduct models.Product
-	if err := database.DB.Where("id = ? AND user_id = ?", productID, userID).First(&existingProduct).Error; err != nil {
+	if err := database.DB.Where("id = ? AND workspace_id = ?", productID, workspaceID).First(&existingProduct).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Product not found"})
 		return
 	}
 
 	// Check package existence and user ownership
 	var existingPackage models.Package
-	if err := database.DB.Where("id = ? AND user_id = ?", requestData.PackageID, userID).First(&existingPackage).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid Package ID or package does not belong to user"})
+	if err := database.DB.Where("id = ? AND workspace_id = ?", requestData.PackageID, workspaceID).First(&existingPackage).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid Package ID or package does not belong to workspace"})
 		return
 	}
-	if err := validateRecipeOwnership(requestData.RecipeIDs, userID.(uint)); err != nil {
+	if err := validateRecipeWorkspace(requestData.RecipeIDs, workspaceID); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -408,16 +399,11 @@ func DeleteProduct(c *gin.Context) {
 		return
 	}
 
-	// Get userID from context
-	userID, exists := c.Get("userID")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-		return
-	}
+	workspaceID := c.MustGet("workspaceID").(uint)
 
 	// Check product existence and user ownership
 	var product models.Product
-	if err := database.DB.Where("id = ? AND user_id = ?", productID, userID).First(&product).Error; err != nil {
+	if err := database.DB.Where("id = ? AND workspace_id = ?", productID, workspaceID).First(&product).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Product not found"})
 		return
 	}

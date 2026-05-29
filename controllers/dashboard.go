@@ -52,37 +52,30 @@ func handleError(c *gin.Context, message string, err error) {
 // @Failure 500 {object} map[string]string "Internal Server Error"
 // @Router /api/dashboard [get]
 func GetDashboardData(c *gin.Context) {
-	userID, exists := c.Get("userID")
-	if !exists {
-		log.Println("Unauthorized access attempt")
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-		return
-	}
-
-	userIDUint := userID.(uint)
+	workspaceID := c.MustGet("workspaceID").(uint)
 	var dashboard DashboardData
 
 	// Get total recipes count
-	if err := database.DB.Model(&models.Recipe{}).Where("user_id = ?", userIDUint).Count(&dashboard.TotalRecipes).Error; err != nil {
+	if err := database.DB.Model(&models.Recipe{}).Where("workspace_id = ?", workspaceID).Count(&dashboard.TotalRecipes).Error; err != nil {
 		handleError(c, "Failed to fetch total recipes", err)
 		return
 	}
 
 	// Get total products count
-	if err := database.DB.Model(&models.Product{}).Where("user_id = ?", userIDUint).Count(&dashboard.TotalProducts).Error; err != nil {
+	if err := database.DB.Model(&models.Product{}).Where("workspace_id = ?", workspaceID).Count(&dashboard.TotalProducts).Error; err != nil {
 		handleError(c, "Failed to fetch total products", err)
 		return
 	}
 
 	// Get total orders count
-	if err := database.DB.Model(&models.Order{}).Where("user_id = ?", userIDUint).Count(&dashboard.TotalOrders).Error; err != nil {
+	if err := database.DB.Model(&models.Order{}).Where("workspace_id = ?", workspaceID).Count(&dashboard.TotalOrders).Error; err != nil {
 		handleError(c, "Failed to fetch total orders", err)
 		return
 	}
 
 	// Get pending orders count
 	if err := database.DB.Model(&models.Order{}).
-		Where("user_id = ? AND status NOT IN (?, ?)", userIDUint, constants.OrderStatusFinished, constants.OrderStatusCanceled).
+		Where("workspace_id = ? AND status NOT IN (?, ?)", workspaceID, constants.OrderStatusFinished, constants.OrderStatusCanceled).
 		Count(&dashboard.PendingOrders).Error; err != nil {
 		handleError(c, "Failed to fetch pending orders count", err)
 		return
@@ -103,7 +96,7 @@ func GetDashboardData(c *gin.Context) {
 			COALESCE(SUM(order_items.price * order_items.quantity), 0) as total`).
 		Joins("JOIN clients ON orders.client_id = clients.id").
 		Joins("LEFT JOIN order_items ON orders.id = order_items.order_id AND order_items.deleted_at IS NULL").
-		Where("orders.user_id = ? AND orders.deleted_at IS NULL", userIDUint).
+		Where("orders.workspace_id = ? AND orders.deleted_at IS NULL", workspaceID).
 		Group("orders.id, clients.name, orders.status, orders.date").
 		Order("orders.date DESC, orders.created_at DESC").
 		Limit(5).
@@ -126,7 +119,7 @@ func GetDashboardData(c *gin.Context) {
 	// Get order distribution by type (status)
 	if err := database.DB.Model(&models.Order{}).
 		Select("status as type, COUNT(*) as count").
-		Where("user_id = ?", userIDUint).
+		Where("workspace_id = ?", workspaceID).
 		Group("status").
 		Scan(&dashboard.OrderTypeDistribution).Error; err != nil {
 		handleError(c, "Failed to fetch order type distribution", err)
@@ -156,14 +149,7 @@ type ProfitData struct {
 // @Failure 500 {object} map[string]string "Internal Server Error"
 // @Router /api/dashboard/profit [get]
 func GetProfitData(c *gin.Context) {
-	userID, exists := c.Get("userID")
-	if !exists {
-		log.Println("Unauthorized access attempt")
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-		return
-	}
-
-	userIDUint := userID.(uint)
+	workspaceID := c.MustGet("workspaceID").(uint)
 	var profitData ProfitData
 
 	type ProfitSummary struct {
@@ -180,8 +166,8 @@ func GetProfitData(c *gin.Context) {
 			COUNT(DISTINCT orders.id) as order_count
 		`).
 		Joins("JOIN orders ON order_items.order_id = orders.id").
-		Where("orders.user_id = ? AND orders.status = ? AND orders.deleted_at IS NULL AND order_items.deleted_at IS NULL",
-			userIDUint, constants.OrderStatusFinished).
+		Where("orders.workspace_id = ? AND orders.status = ? AND orders.deleted_at IS NULL AND order_items.deleted_at IS NULL",
+			workspaceID, constants.OrderStatusFinished).
 		Scan(&summary).Error; err != nil {
 		handleError(c, "Failed to fetch profit data", err)
 		return

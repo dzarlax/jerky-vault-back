@@ -1,10 +1,10 @@
 package controllers
 
 import (
-    "github.com/gin-gonic/gin"
-    "mobile-backend-go/models"
-    "mobile-backend-go/database"
-    "net/http"
+	"github.com/gin-gonic/gin"
+	"mobile-backend-go/database"
+	"mobile-backend-go/models"
+	"net/http"
 )
 
 // GetPackages returns list of all packages
@@ -18,15 +18,15 @@ import (
 // @Failure 500 {object} map[string]string "Internal Server Error"
 // @Router /api/packages [get]
 func GetPackages(c *gin.Context) {
-    userID := c.MustGet("userID").(uint)
+	workspaceID := c.MustGet("workspaceID").(uint)
 
-    var packages []models.Package
-    if err := database.DB.Where("user_id = ?", userID).Find(&packages).Error; err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch packages"})
-        return
-    }
+	var packages []models.Package
+	if err := database.DB.Where("workspace_id = ?", workspaceID).Find(&packages).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch packages"})
+		return
+	}
 
-    c.JSON(http.StatusOK, packages)
+	c.JSON(http.StatusOK, packages)
 }
 
 // AddPackage adds a new package
@@ -43,24 +43,26 @@ func GetPackages(c *gin.Context) {
 // @Failure 500 {object} map[string]string "Internal Server Error"
 // @Router /api/packages [post]
 func AddPackage(c *gin.Context) {
-    userID := c.MustGet("userID").(uint)
+	userID := c.MustGet("userID").(uint)
+	workspaceID := c.MustGet("workspaceID").(uint)
 
-    var requestData models.PackageCreateDTO
-    if err := c.ShouldBindJSON(&requestData); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-        return
-    }
+	var requestData models.PackageCreateDTO
+	if err := c.ShouldBindJSON(&requestData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
-    // Create Package model from DTO
-    newPackage := models.Package{
-        Name:   requestData.Name,
-        UserID: userID,
-    }
+	// Create Package model from DTO
+	newPackage := models.Package{
+		Name:        requestData.Name,
+		UserID:      userID,
+		WorkspaceID: &workspaceID,
+	}
 
-    if err := database.DB.Create(&newPackage).Error; err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add package"})
-        return
-    }
+	if err := database.DB.Create(&newPackage).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add package"})
+		return
+	}
 
-    c.JSON(http.StatusCreated, newPackage)
+	c.JSON(http.StatusCreated, newPackage)
 }

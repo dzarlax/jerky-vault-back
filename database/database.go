@@ -72,6 +72,10 @@ func ConnectDatabase() {
 		log.Fatal("Price workspace backfill error: ", err)
 	}
 
+	if err := BackfillBusinessWorkspaces(DB); err != nil {
+		log.Fatal("Business workspace backfill error: ", err)
+	}
+
 	backfillOrderDates()
 
 	log.Println("Migrations completed successfully.")
@@ -79,26 +83,37 @@ func ConnectDatabase() {
 
 // createIndexes creates indexes for frequently queried fields
 func createIndexes() {
-	// Orders: frequently filtered by user_id, client_id, status, created_at
+	// Orders: frequently filtered by workspace/user, client_id, status, created_at
 	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id)`)
+	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_orders_workspace_id ON orders(workspace_id)`)
 	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_orders_client_id ON orders(client_id)`)
 	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)`)
 	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at DESC)`)
 	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_orders_user_status ON orders(user_id, status)`)
+	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_orders_workspace_status ON orders(workspace_id, status)`)
+	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_orders_workspace_client_id ON orders(workspace_id, client_id)`)
 
 	// Order Items: frequently filtered by order_id, product_id
 	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id)`)
 	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_order_items_product_id ON order_items(product_id)`)
 
-	// Products: frequently filtered by user_id, package_id
+	// Products: frequently filtered by workspace/user, package_id
 	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_products_user_id ON products(user_id)`)
+	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_products_workspace_id ON products(workspace_id)`)
 	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_products_package_id ON products(package_id)`)
+	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_products_workspace_package_id ON products(workspace_id, package_id)`)
 
-	// Clients: frequently filtered by user_id
+	// Clients: frequently filtered by workspace/user
 	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_clients_user_id ON clients(user_id)`)
+	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_clients_workspace_id ON clients(workspace_id)`)
 
-	// Recipes: frequently filtered by user_id
+	// Recipes: frequently filtered by workspace/user
 	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_recipes_user_id ON recipes(user_id)`)
+	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_recipes_workspace_id ON recipes(workspace_id)`)
+
+	// Packages: frequently filtered by workspace/user
+	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_packages_user_id ON packages(user_id)`)
+	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_packages_workspace_id ON packages(workspace_id)`)
 
 	// Ingredients: frequently filtered by name
 	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_ingredients_name ON ingredients(name)`)
@@ -115,9 +130,11 @@ func createIndexes() {
 	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_prices_ingredient_id ON prices(ingredient_id)`)
 	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_prices_date ON prices(date DESC)`)
 
-	// Cooking Sessions: frequently filtered by recipe_id, user_id, date
+	// Cooking Sessions: frequently filtered by recipe_id, workspace/user, date
 	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_cooking_sessions_recipe_id ON cooking_sessions(recipe_id)`)
 	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_cooking_sessions_user_id ON cooking_sessions(user_id)`)
+	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_cooking_sessions_workspace_id ON cooking_sessions(workspace_id)`)
+	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_cooking_sessions_workspace_recipe_id ON cooking_sessions(workspace_id, recipe_id)`)
 	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_cooking_sessions_date ON cooking_sessions(date DESC)`)
 
 	// Recipe Ingredients: frequently filtered by recipe_id, ingredient_id

@@ -1,12 +1,12 @@
 package controllers
 
 import (
-    "github.com/gin-gonic/gin"
-    "mobile-backend-go/models"
-    "mobile-backend-go/database"
-    "net/http"
-    "log"
-    "strconv"
+	"github.com/gin-gonic/gin"
+	"log"
+	"mobile-backend-go/database"
+	"mobile-backend-go/models"
+	"net/http"
+	"strconv"
 )
 
 // GetClient returns a client by ID
@@ -23,20 +23,20 @@ import (
 // @Failure 500 {object} map[string]string "Internal Server Error"
 // @Router /api/clients/{id} [get]
 func GetClient(c *gin.Context) {
-    userID := c.MustGet("userID").(uint)
-    clientID, err := strconv.Atoi(c.Param("id"))
-    if err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid client ID"})
-        return
-    }
+	workspaceID := c.MustGet("workspaceID").(uint)
+	clientID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid client ID"})
+		return
+	}
 
-    var client models.Client
-    if err := database.DB.Where("id = ? AND user_id = ?", clientID, userID).First(&client).Error; err != nil {
-        c.JSON(http.StatusNotFound, gin.H{"error": "Client not found"})
-        return
-    }
+	var client models.Client
+	if err := database.DB.Where("id = ? AND workspace_id = ?", clientID, workspaceID).First(&client).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Client not found"})
+		return
+	}
 
-    c.JSON(http.StatusOK, client)
+	c.JSON(http.StatusOK, client)
 }
 
 // GetClients returns list of all clients
@@ -50,16 +50,16 @@ func GetClient(c *gin.Context) {
 // @Failure 500 {object} map[string]string "Internal Server Error"
 // @Router /api/clients [get]
 func GetClients(c *gin.Context) {
-    userID := c.MustGet("userID").(uint)
+	workspaceID := c.MustGet("workspaceID").(uint)
 
-    var clients []models.Client
-    if err := database.DB.Where("user_id = ?", userID).Find(&clients).Error; err != nil {
-        log.Printf("Failed to fetch clients for userID %v: %v", userID, err)
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch clients"})
-        return
-    }
+	var clients []models.Client
+	if err := database.DB.Where("workspace_id = ?", workspaceID).Find(&clients).Error; err != nil {
+		log.Printf("Failed to fetch clients for workspaceID %v: %v", workspaceID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch clients"})
+		return
+	}
 
-    c.JSON(http.StatusOK, clients)
+	c.JSON(http.StatusOK, clients)
 }
 
 // AddClient adds a new client
@@ -76,33 +76,35 @@ func GetClients(c *gin.Context) {
 // @Failure 500 {object} map[string]string "Internal Server Error"
 // @Router /api/clients [post]
 func AddClient(c *gin.Context) {
-    userID := c.MustGet("userID").(uint)
+	userID := c.MustGet("userID").(uint)
+	workspaceID := c.MustGet("workspaceID").(uint)
 
-    var requestData models.ClientCreateDTO
-    if err := c.ShouldBindJSON(&requestData); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-        return
-    }
+	var requestData models.ClientCreateDTO
+	if err := c.ShouldBindJSON(&requestData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
-    // Create Client model from DTO
-    newClient := models.Client{
-        Name:      requestData.Name,
-        Surname:   requestData.Surname,
-        Telegram:  requestData.Telegram,
-        Instagram: requestData.Instagram,
-        Phone:     requestData.Phone,
-        Address:   requestData.Address,
-        Source:    requestData.Source,
-        UserID:    userID,
-    }
+	// Create Client model from DTO
+	newClient := models.Client{
+		Name:        requestData.Name,
+		Surname:     requestData.Surname,
+		Telegram:    requestData.Telegram,
+		Instagram:   requestData.Instagram,
+		Phone:       requestData.Phone,
+		Address:     requestData.Address,
+		Source:      requestData.Source,
+		UserID:      userID,
+		WorkspaceID: &workspaceID,
+	}
 
-    if err := database.DB.Create(&newClient).Error; err != nil {
-        log.Printf("Failed to add client: %v", err)
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add client"})
-        return
-    }
+	if err := database.DB.Create(&newClient).Error; err != nil {
+		log.Printf("Failed to add client: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add client"})
+		return
+	}
 
-    c.JSON(http.StatusCreated, newClient)
+	c.JSON(http.StatusCreated, newClient)
 }
 
 // UpdateClient updates client data
@@ -121,40 +123,40 @@ func AddClient(c *gin.Context) {
 // @Failure 500 {object} map[string]string "Internal Server Error"
 // @Router /api/clients/{id} [put]
 func UpdateClient(c *gin.Context) {
-    userID := c.MustGet("userID").(uint)
-    clientID, err := strconv.Atoi(c.Param("id"))
-    if err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid client ID"})
-        return
-    }
+	workspaceID := c.MustGet("workspaceID").(uint)
+	clientID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid client ID"})
+		return
+	}
 
-    var client models.Client
-    if err := database.DB.Where("id = ? AND user_id = ?", clientID, userID).First(&client).Error; err != nil {
-        c.JSON(http.StatusNotFound, gin.H{"error": "Client not found"})
-        return
-    }
+	var client models.Client
+	if err := database.DB.Where("id = ? AND workspace_id = ?", clientID, workspaceID).First(&client).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Client not found"})
+		return
+	}
 
-    var requestData models.ClientUpdateDTO
-    if err := c.ShouldBindJSON(&requestData); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-        return
-    }
+	var requestData models.ClientUpdateDTO
+	if err := c.ShouldBindJSON(&requestData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
-    // Update client fields from DTO
-    client.Name = requestData.Name
-    client.Surname = requestData.Surname
-    client.Telegram = requestData.Telegram
-    client.Instagram = requestData.Instagram
-    client.Phone = requestData.Phone
-    client.Address = requestData.Address
-    client.Source = requestData.Source
+	// Update client fields from DTO
+	client.Name = requestData.Name
+	client.Surname = requestData.Surname
+	client.Telegram = requestData.Telegram
+	client.Instagram = requestData.Instagram
+	client.Phone = requestData.Phone
+	client.Address = requestData.Address
+	client.Source = requestData.Source
 
-    if err := database.DB.Save(&client).Error; err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update client"})
-        return
-    }
+	if err := database.DB.Save(&client).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update client"})
+		return
+	}
 
-    c.JSON(http.StatusOK, gin.H{"message": "Client updated successfully"})
+	c.JSON(http.StatusOK, gin.H{"message": "Client updated successfully"})
 }
 
 // DeleteClient deletes a client
@@ -170,23 +172,23 @@ func UpdateClient(c *gin.Context) {
 // @Failure 500 {object} map[string]string "Internal Server Error"
 // @Router /api/clients/{id} [delete]
 func DeleteClient(c *gin.Context) {
-    userID := c.MustGet("userID").(uint)
-    clientID, err := strconv.Atoi(c.Param("id"))
-    if err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid client ID"})
-        return
-    }
+	workspaceID := c.MustGet("workspaceID").(uint)
+	clientID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid client ID"})
+		return
+	}
 
-    var client models.Client
-    if err := database.DB.Where("id = ? AND user_id = ?", clientID, userID).First(&client).Error; err != nil {
-        c.JSON(http.StatusNotFound, gin.H{"error": "Client not found"})
-        return
-    }
+	var client models.Client
+	if err := database.DB.Where("id = ? AND workspace_id = ?", clientID, workspaceID).First(&client).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Client not found"})
+		return
+	}
 
-    if err := database.DB.Delete(&client).Error; err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete client"})
-        return
-    }
+	if err := database.DB.Delete(&client).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete client"})
+		return
+	}
 
-    c.JSON(http.StatusOK, gin.H{"message": "Client deleted successfully"})
+	c.JSON(http.StatusOK, gin.H{"message": "Client deleted successfully"})
 }

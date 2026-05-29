@@ -123,6 +123,10 @@ definitions:
         $ref: '#/definitions/models.User'
       user_id:
         type: integer
+      workspace:
+        $ref: '#/definitions/models.Workspace'
+      workspace_id:
+        type: integer
     required:
     - name
     - surname
@@ -192,6 +196,10 @@ definitions:
       user:
         $ref: '#/definitions/models.User'
       user_id:
+        type: integer
+      workspace:
+        $ref: '#/definitions/models.Workspace'
+      workspace_id:
         type: integer
       yield:
         minLength: 1
@@ -294,6 +302,10 @@ definitions:
         $ref: '#/definitions/models.User'
       user_id:
         type: integer
+      workspace:
+        $ref: '#/definitions/models.Workspace'
+      workspace_id:
+        type: integer
     type: object
   models.OrderItem:
     properties:
@@ -337,6 +349,10 @@ definitions:
       user:
         $ref: '#/definitions/models.User'
       user_id:
+        type: integer
+      workspace:
+        $ref: '#/definitions/models.Workspace'
+      workspace_id:
         type: integer
     required:
     - name
@@ -438,6 +454,10 @@ definitions:
         $ref: '#/definitions/models.User'
       user_id:
         type: integer
+      workspace:
+        $ref: '#/definitions/models.Workspace'
+      workspace_id:
+        type: integer
     required:
     - name
     - price
@@ -501,6 +521,10 @@ definitions:
       user:
         $ref: '#/definitions/models.User'
       user_id:
+        type: integer
+      workspace:
+        $ref: '#/definitions/models.Workspace'
+      workspace_id:
         type: integer
     required:
     - name

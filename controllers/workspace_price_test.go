@@ -23,6 +23,7 @@ type workspacePriceFixture struct {
 	SecondWorkspace   models.Workspace
 	Ingredient        models.Ingredient
 	Recipe            models.Recipe
+	SecondRecipe      models.Recipe
 }
 
 func setupWorkspacePriceTest(t *testing.T) workspacePriceFixture {
@@ -89,9 +90,13 @@ func setupWorkspacePriceTest(t *testing.T) workspacePriceFixture {
 		t.Fatalf("create ingredient: %v", err)
 	}
 
-	recipe := models.Recipe{Name: "Test recipe", UserID: user.ID}
+	recipe := models.Recipe{Name: "Test recipe", UserID: user.ID, WorkspaceID: &personalWorkspace.ID}
 	if err := db.Create(&recipe).Error; err != nil {
 		t.Fatalf("create recipe: %v", err)
+	}
+	secondRecipe := models.Recipe{Name: "Second workspace recipe", UserID: user.ID, WorkspaceID: &secondWorkspace.ID}
+	if err := db.Create(&secondRecipe).Error; err != nil {
+		t.Fatalf("create second recipe: %v", err)
 	}
 	recipeIngredient := models.RecipeIngredient{
 		RecipeID:     recipe.ID,
@@ -102,6 +107,15 @@ func setupWorkspacePriceTest(t *testing.T) workspacePriceFixture {
 	if err := db.Create(&recipeIngredient).Error; err != nil {
 		t.Fatalf("create recipe ingredient: %v", err)
 	}
+	secondRecipeIngredient := models.RecipeIngredient{
+		RecipeID:     secondRecipe.ID,
+		IngredientID: ingredient.ID,
+		Quantity:     "1000",
+		Unit:         "g",
+	}
+	if err := db.Create(&secondRecipeIngredient).Error; err != nil {
+		t.Fatalf("create second recipe ingredient: %v", err)
+	}
 
 	return workspacePriceFixture{
 		User:              user,
@@ -109,6 +123,7 @@ func setupWorkspacePriceTest(t *testing.T) workspacePriceFixture {
 		SecondWorkspace:   secondWorkspace,
 		Ingredient:        ingredient,
 		Recipe:            recipe,
+		SecondRecipe:      secondRecipe,
 	}
 }
 
@@ -196,7 +211,7 @@ func TestGetRecipeCostUsesActiveWorkspacePrice(t *testing.T) {
 	}
 	assertAttachedLatestPrice(t, personalRecipe, 10, fixture.PersonalWorkspace.ID)
 
-	secondRecipe := getRecipeForWorkspace(t, fixture, fixture.SecondWorkspace.ID)
+	secondRecipe := getRecipeForWorkspace(t, fixture, fixture.SecondWorkspace.ID, fixture.SecondRecipe.ID)
 	if secondRecipe.TotalCost != 20 {
 		t.Fatalf("second workspace recipe total = %v, want 20", secondRecipe.TotalCost)
 	}
@@ -208,7 +223,7 @@ func TestGetRecipeCostIsZeroWhenWorkspaceHasNoPrice(t *testing.T) {
 
 	createPrice(t, fixture.User.ID, fixture.PersonalWorkspace.ID, fixture.Ingredient.ID, 10)
 
-	recipe := getRecipeForWorkspace(t, fixture, fixture.SecondWorkspace.ID)
+	recipe := getRecipeForWorkspace(t, fixture, fixture.SecondWorkspace.ID, fixture.SecondRecipe.ID)
 	if recipe.TotalCost != 0 {
 		t.Fatalf("empty workspace recipe total = %v, want 0", recipe.TotalCost)
 	}
@@ -237,8 +252,13 @@ func createPrice(t *testing.T, userID uint, workspaceID uint, ingredientID uint,
 	}
 }
 
-func getRecipeForWorkspace(t *testing.T, fixture workspacePriceFixture, workspaceID uint) models.Recipe {
+func getRecipeForWorkspace(t *testing.T, fixture workspacePriceFixture, workspaceID uint, recipeID ...uint) models.Recipe {
 	t.Helper()
+
+	targetRecipeID := fixture.Recipe.ID
+	if len(recipeID) > 0 {
+		targetRecipeID = recipeID[0]
+	}
 
 	response := runWorkspaceRequest(
 		fixture.User.ID,
@@ -246,7 +266,7 @@ func getRecipeForWorkspace(t *testing.T, fixture workspacePriceFixture, workspac
 		GetRecipe,
 		http.MethodGet,
 		"/recipes/:id",
-		"/recipes/"+uintToString(fixture.Recipe.ID),
+		"/recipes/"+uintToString(targetRecipeID),
 	)
 	if response.Code != http.StatusOK {
 		t.Fatalf("get recipe status = %d body = %s", response.Code, response.Body.String())
