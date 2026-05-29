@@ -272,6 +272,10 @@ definitions:
         type: string
       updated_at:
         type: string
+      workspace_ingredients:
+        items:
+          $ref: '#/definitions/models.WorkspaceIngredient'
+        type: array
     required:
     - name
     - type
@@ -620,6 +624,10 @@ definitions:
         type: string
       id:
         type: integer
+      ingredients:
+        items:
+          $ref: '#/definitions/models.WorkspaceIngredient'
+        type: array
       members:
         items:
           $ref: '#/definitions/models.WorkspaceMember'
@@ -635,6 +643,47 @@ definitions:
     required:
     - name
     - slug
+    type: object
+  models.WorkspaceIngredient:
+    properties:
+      active:
+        type: boolean
+      alias:
+        type: string
+      category:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: integer
+      ingredient:
+        $ref: '#/definitions/models.Ingredient'
+      ingredient_id:
+        type: integer
+      latest_price:
+        $ref: '#/definitions/models.Price'
+      updated_at:
+        type: string
+      workspace:
+        $ref: '#/definitions/models.Workspace'
+      workspace_id:
+        type: integer
+    type: object
+  models.WorkspaceIngredientCreateDTO:
+    properties:
+      ingredient_id:
+        type: integer
+    required:
+    - ingredient_id
+    type: object
+  models.WorkspaceIngredientUpdateDTO:
+    properties:
+      active:
+        type: boolean
+      alias:
+        type: string
+      category:
+        type: string
     type: object
   models.WorkspaceMember:
     properties:
@@ -1145,6 +1194,34 @@ paths:
       security:
       - BearerAuth: []
       summary: Check if ingredient exists
+      tags:
+      - Ingredients
+  /api/ingredients/search:
+    get:
+      description: Search global ingredients by name
+      parameters:
+      - description: Search query
+        in: query
+        name: query
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Ingredient'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Search global ingredients
       tags:
       - Ingredients
   /api/orders:
@@ -2028,6 +2105,167 @@ paths:
       summary: Delete an ingredient from a recipe
       tags:
       - Recipe Ingredients
+  /api/workspace-ingredients:
+    get:
+      description: Get active ingredients in the current workspace working set
+      parameters:
+      - description: Workspace ID
+        in: header
+        name: X-Workspace-ID
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.WorkspaceIngredient'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get workspace ingredients
+      tags:
+      - Workspace Ingredients
+    post:
+      consumes:
+      - application/json
+      description: Add an existing global ingredient to the current workspace working
+        set
+      parameters:
+      - description: Workspace ID
+        in: header
+        name: X-Workspace-ID
+        type: integer
+      - description: Workspace ingredient data
+        in: body
+        name: ingredient
+        required: true
+        schema:
+          $ref: '#/definitions/models.WorkspaceIngredientCreateDTO'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.WorkspaceIngredient'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Add workspace ingredient
+      tags:
+      - Workspace Ingredients
+  /api/workspace-ingredients/{id}:
+    delete:
+      description: Deactivate an ingredient in the current workspace working set
+      parameters:
+      - description: Workspace ID
+        in: header
+        name: X-Workspace-ID
+        type: integer
+      - description: Workspace ingredient ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "200":
+          description: Workspace ingredient deactivated
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Workspace ingredient not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete workspace ingredient
+      tags:
+      - Workspace Ingredients
+    patch:
+      consumes:
+      - application/json
+      description: Update workspace ingredient metadata in the current workspace
+      parameters:
+      - description: Workspace ID
+        in: header
+        name: X-Workspace-ID
+        type: integer
+      - description: Workspace ingredient ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Workspace ingredient update
+        in: body
+        name: ingredient
+        required: true
+        schema:
+          $ref: '#/definitions/models.WorkspaceIngredientUpdateDTO'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.WorkspaceIngredient'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Workspace ingredient not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update workspace ingredient
+      tags:
+      - Workspace Ingredients
   /api/workspaces:
     get:
       description: Get workspaces available to the authenticated user. This bootstrap

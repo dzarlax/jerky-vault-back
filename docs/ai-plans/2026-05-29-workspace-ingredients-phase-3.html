@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Implementation Plan: Workspace Ingredients Phase 3</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { margin: 0; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f6f7f9; color: #1f2937; line-height: 1.5; }
+    main { max-width: 1120px; margin: 0 auto; padding: 32px; }
+    section { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 16px 0; }
+    h1, h2, h3 { line-height: 1.2; margin-top: 0; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    pre { overflow-x: auto; background: #f3f4f6; padding: 12px; border-radius: 6px; }
+    ul, ol { padding-left: 22px; }
+    li { margin: 6px 0; }
+    .badge { display: inline-block; padding: 4px 10px; border-radius: 999px; background: #e5e7eb; font-size: 12px; font-weight: 600; }
+    .risk { border-left: 4px solid #dc2626; }
+    .approval { border-left: 4px solid #d97706; }
+    .note { border-left: 4px solid #2563eb; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+    .card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; background: #fafafa; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Implementation Plan: Workspace Ingredients Phase 3</h1>
+  <p class="badge">Approval required before implementation</p>
+
+  <section>
+    <h2>Task Summary</h2>
+    <p>
+      Phase 1 added workspaces and request workspace resolution. Phase 2A/2B migrated prices and primary business tables to <code>workspace_id</code>. Phase 3 should add the missing ingredient working-set layer: <code>workspace_ingredients</code>.
+    </p>
+    <p>
+      Recommended scope for this backend PR is Phase 3A: schema, backfill, backend API behavior, and server-side integrity enforcement. The frontend workbench should be a follow-up PR in the frontend repository once this API contract is reviewed.
+    </p>
+  </section>
+
+  <section>
+    <h2>Current Behavior</h2>
+    <div class="grid">
+      <div class="card">
+        <h3>Workspace Scoped</h3>
+        <ul>
+          <li><code>prices</code> are scoped by <code>workspace_id</code>.</li>
+          <li><code>recipes</code>, <code>products</code>, <code>packages</code>, <code>clients</code>, <code>orders</code>, and <code>cooking_sessions</code> are scoped by <code>workspace_id</code>.</li>
+          <li>Recipe cost lookup reads latest prices in the active workspace.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Still Global</h3>
+        <ul>
+          <li><code>ingredients</code> remain a global dictionary with globally unique <code>name</code>.</li>
+          <li><code>GET /api/ingredients</code> returns every active ingredient in the installation.</li>
+          <li><code>POST /api/prices</code> accepts any existing global <code>ingredient_id</code>.</li>
+          <li><code>POST /api/recipes/:id/ingredients</code> accepts any existing global <code>ingredient_id</code> if the recipe belongs to the workspace.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Desired Behavior</h2>
+    <ul>
+      <li><code>ingredients</code> remains the shared dictionary. Do not add <code>workspace_id</code> to <code>ingredients</code>.</li>
+      <li><code>workspace_ingredients</code> becomes the membership layer between a workspace and shared ingredients.</li>
+      <li><code>GET /api/ingredients</code> stays backward-compatible in Phase 3A and continues to return the global dictionary until the frontend workbench is ready.</li>
+      <li>A new workspace ingredient endpoint returns only ingredients in the active workspace working set.</li>
+      <li>Global dictionary search remains available for add-to-workspace flows.</li>
+      <li>Creating or reusing an ingredient through <code>POST /api/ingredients</code> guarantees active membership in the current workspace, including the existing-name path.</li>
+      <li>In Phase 3A compatibility mode, price and recipe ingredient writes auto-ensure active membership for valid global ingredients before writing. Strict rejection of non-members is deferred until the frontend switches to scoped workspace pickers.</li>
+      <li>Existing production data remains visible because memberships are backfilled from existing prices, recipes, and cooking sessions.</li>
+    </ul>
+  </section>
+
+  <section class="note">
+    <h2>Frontend Compatibility Findings</h2>
+    <p>
+      The sibling frontend repository <code>jerky-vault</code> currently uses <code>GET /api/ingredients</code> as the picker source for the ingredient page, prices page, recipes page, recipe create modal, and recipe edit modal. The shared fetcher does not send <code>X-Workspace-ID</code>, so the deployed UI still relies on the backend's default workspace fallback.
+    </p>
+    <p>
+      Because <code>POST /api/prices</code> and <code>POST /api/recipes/:id/ingredients</code> are called directly with ids from the global ingredient list, rejecting global-but-not-yet-linked ingredients in backend-only Phase 3A would break existing price and recipe flows. The backend PR should therefore populate membership on writes for valid global ingredients, while exposing the stricter workspace list API for the Phase 3B frontend migration.
+    </p>
+  </section>
+
+  <section>
+    <h2>Files Likely to Change</h2>
+    <ul>
+      <li><code>models/workspace_ingredient.go</code> - new membership model with workspace and ingredient relations.</li>
+      <li><code>models/workspace.go</code>, <code>models/ingredient.go</code> - optional relation slices for preloads.</li>
+      <li><code>database/database.go</code> - AutoMigrate, indexes, and startup backfill wiring.</li>
+      <li><code>database/workspace_ingredients.go</code> - backfill and validation helpers.</li>
+      <li><code>controllers/ingredients.go</code> - scoped ingredient list, global search, create-and-link behavior, and explicit membership endpoints.</li>
+      <li><code>controllers/prices.go</code> - ensure ingredient membership before creating a price; keep price list reads scoped only by existing <code>workspace_id</code> filters.</li>
+      <li><code>controllers/recipe_ingredients.go</code> - ensure ingredient membership before adding an ingredient to a recipe.</li>
+      <li><code>controllers/recipes.go</code> - keep recipe cost behavior but ensure ingredient filters cannot expose non-workspace ingredients.</li>
+      <li><code>routes/routes.go</code> - add workspace ingredient and global search routes.</li>
+      <li><code>controllers/*_test.go</code>, <code>database/*_test.go</code> - behavioral tests and backfill SQL shape tests.</li>
+      <li><code>docs/docs.go</code>, <code>docs/swagger.json</code>, <code>docs/swagger.yaml</code> - regenerate when annotations/API shape change.</li>
+      <li><code>docs/ai-plans/2026-05-29-workspace-ingredients-phase-3.html</code> - update after implementation with actual checks.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Proposed API Contract</h2>
+    <ul>
+      <li><code>GET /api/ingredients</code> - compatibility route. Keep returning the global dictionary in Phase 3A so the existing frontend picker does not lose access to not-yet-linked ingredients.</li>
+      <li><code>GET /api/workspace-ingredients</code> - explicit workspace working-set endpoint with membership metadata and latest price summary.</li>
+      <li><code>POST /api/workspace-ingredients</code> - add an existing global ingredient to the active workspace by <code>ingredient_id</code>.</li>
+      <li><code>PATCH /api/workspace-ingredients/:id</code> - update membership metadata such as <code>active</code>, <code>alias</code>, or <code>category</code>.</li>
+      <li><code>DELETE /api/workspace-ingredients/:id</code> - soft-delete or deactivate membership, but do not delete the global ingredient.</li>
+      <li><code>GET /api/ingredients/search?query=...</code> - search the global dictionary for add-to-workspace flows.</li>
+      <li><code>POST /api/ingredients</code> - create a global ingredient and link it to the active workspace in one transaction. If the name already exists globally, ensure membership for the existing ingredient and return <code>409</code> with <code>existing_id</code> plus membership/link metadata. This preserves the existing create-or-reuse frontend flow.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Model and Backfill Design</h2>
+    <pre><code>type WorkspaceIngredient struct {
+    ID           uint
+    CreatedAt    time.Time
+    UpdatedAt    time.Time
+    DeletedAt    gorm.DeletedAt
+    WorkspaceID  uint
+    IngredientID uint
+    Active       bool
+    Alias        string
+    Category     string
+}</code></pre>
+    <p>Backfill memberships from active usage:</p>
+    <ul>
+      <li>Any active <code>prices</code> row with non-null <code>workspace_id</code>.</li>
+      <li>Any active <code>recipe_ingredients</code> row whose parent <code>recipe</code> is active and has non-null <code>workspace_id</code>.</li>
+      <li>Any active <code>cooking_session_ingredients</code> row whose parent <code>cooking_session</code> is active and has non-null <code>workspace_id</code>.</li>
+    </ul>
+    <p>
+      Use <code>ON CONFLICT DO NOTHING</code> / equivalent GORM clause so duplicate sources converge into one active membership. The validation should fail only if active usage references an ingredient that still has no active workspace membership after backfill.
+    </p>
+    <p>
+      <code>EnsureWorkspaceIngredient</code> must handle previously inactive or soft-deleted membership rows by reactivating the existing relation instead of creating duplicate logical membership.
+    </p>
+  </section>
+
+  <section>
+    <h2>Implementation Steps</h2>
+    <ol>
+      <li>Add <code>WorkspaceIngredient</code> model and relations.</li>
+      <li>Add indexes: <code>workspace_id</code>, <code>ingredient_id</code>, <code>(workspace_id, active)</code>, and active unique <code>(workspace_id, ingredient_id)</code>.</li>
+      <li>Add backfill from prices, recipe ingredients, and cooking session ingredients.</li>
+      <li>Add shared helper: <code>EnsureWorkspaceIngredient</code> and <code>IngredientInWorkspace</code>.</li>
+      <li>Keep <code>GET /api/ingredients</code> global in Phase 3A for frontend compatibility.</li>
+      <li>Add explicit workspace ingredient endpoints and global search endpoint.</li>
+      <li>Change <code>POST /api/ingredients</code> to create dictionary row plus membership in one transaction, and to ensure membership for the existing-name conflict path.</li>
+      <li>In <code>POST /api/prices</code> and <code>POST /api/recipes/:id/ingredients</code>, call <code>EnsureWorkspaceIngredient</code> for valid global ingredient ids before writing. Keep invalid ingredient ids rejected.</li>
+      <li>Keep <code>GET /api/prices</code> list behavior unchanged except for existing workspace filtering. Do not add a workspace ingredient join to price list reads in Phase 3A.</li>
+      <li>Keep recipe cost lookup behavior unchanged. Phase 3A write paths should populate membership for compatibility; Phase 3B can switch to strict non-member rejection after the frontend uses scoped pickers.</li>
+      <li>Regenerate Swagger docs and update this plan with checks run.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Test Plan</h2>
+    <ul>
+      <li><code>go test ./...</code> - full test suite.</li>
+      <li><code>go vet ./...</code> - static sanity check.</li>
+      <li><code>go build ./...</code> - compile all packages.</li>
+      <li><code>go run github.com/swaggo/swag/cmd/swag@v1.16.3 init -g main.go</code> - regenerate Swagger after annotation changes.</li>
+      <li>Backfill SQL tests: membership is sourced from prices, recipe ingredients through recipes, and cooking session ingredients through sessions.</li>
+      <li>Backfill behavior test on SQLite where one ingredient appears through multiple sources and creates one workspace membership.</li>
+      <li>Controller test: <code>GET /api/ingredients</code> still returns the global dictionary for compatibility.</li>
+      <li>Controller test: <code>GET /api/workspace-ingredients</code> returns only active workspace ingredients for same user, two workspaces.</li>
+      <li>Controller test: global search finds dictionary ingredients that are not in the active workspace.</li>
+      <li>Controller test: <code>POST /api/workspace-ingredients</code> links an existing ingredient and is idempotent or conflict-safe.</li>
+      <li>Controller test: <code>POST /api/ingredients</code> creates a dictionary ingredient and links it to the active workspace.</li>
+      <li>Controller test: <code>POST /api/ingredients</code> with an existing global name ensures active workspace membership and returns the existing ingredient identity.</li>
+      <li>Compatibility tests: price creation and recipe ingredient creation with valid global-but-not-workspace ingredients auto-create active workspace membership and still complete the original write.</li>
+      <li>Guard tests: price creation and recipe ingredient creation still reject invalid ingredient ids.</li>
+      <li>Regression tests: existing price and recipe cost behavior remains workspace-isolated.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Manual QA Checklist</h2>
+    <ul>
+      <li>After migration, verify each workspace sees ingredients inferred from its existing prices and recipes.</li>
+      <li>Verify global dictionary search can find an ingredient that is not yet in the active workspace list.</li>
+      <li>Add an existing global ingredient to a workspace, then create a price for it.</li>
+      <li>Create a brand-new ingredient and confirm it appears in the active workspace list while <code>GET /api/ingredients</code> remains global.</li>
+      <li>Submit an existing global ingredient name through <code>POST /api/ingredients</code> and confirm the response provides the existing id and links membership for the active workspace.</li>
+      <li>Create a price for a global-but-not-workspace ingredient through the existing frontend flow and confirm it succeeds, then confirm the ingredient appears in <code>/api/workspace-ingredients</code>.</li>
+      <li>Add a global-but-not-workspace ingredient to a recipe through the existing frontend flow and confirm it succeeds, then confirm the ingredient appears in <code>/api/workspace-ingredients</code>.</li>
+      <li>Verify startup logs show migrations and workspace ingredient backfill completed.</li>
+      <li>Verify production unmapped membership counts are zero for active price/recipe/session ingredient usage.</li>
+    </ul>
+  </section>
+
+  <section class="risk">
+    <h2>Risks and Edge Cases</h2>
+    <ul>
+      <li><strong>Frontend compatibility:</strong> <code>GET /api/ingredients</code> intentionally stays global in Phase 3A. The flip to workspace-scoped default behavior belongs with the frontend workbench in Phase 3B.</li>
+      <li><strong>Write compatibility:</strong> current frontend price and recipe forms post ids from the global dictionary directly. Phase 3A must auto-ensure workspace membership on those writes; strict non-member rejection belongs after the Phase 3B frontend switch.</li>
+      <li><strong>Duplicate global names:</strong> <code>ingredients.name</code> is globally unique. Phase 3 should not solve aliases or cross-domain naming conflicts unless required for membership metadata.</li>
+      <li><strong>Backfill completeness:</strong> missing memberships would make existing usage absent from <code>/api/workspace-ingredients</code>. Backfill validation and manual DB checks are mandatory.</li>
+      <li><strong>Deactivate semantics:</strong> deleting a workspace ingredient should not break historical recipes, prices, or sessions. Recommendation: soft-delete/deactivate membership for default list visibility, not hard-delete usage.</li>
+      <li><strong>Stale price definition:</strong> stale/current price state needs a threshold. Recommendation: do not implement stale filtering in Phase 3A unless a fixed threshold is explicitly approved.</li>
+      <li><strong>Sort bug spillover:</strong> <code>prices.go</code> currently allows <code>ingredient_name</code>/<code>ingredient_type</code> sort values without joining ingredients. Phase 3 touches ingredient joins, so decide whether to fix it in-scope or keep it separate.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Rollback Plan</h2>
+    <ul>
+      <li><code>workspace_ingredients</code> is additive. Old code can ignore the table.</li>
+      <li>If deployment fails during backfill validation, revert the image. The new table can remain in the database.</li>
+      <li>If scoped ingredient endpoints regress the UI, keep <code>GET /api/ingredients</code> global and keep write auto-linking enabled while membership data remains populated.</li>
+      <li>Do not drop or rewrite global <code>ingredients</code> rows in Phase 3.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Open Questions</h2>
+    <ul>
+      <li><strong>Scope split:</strong> should Phase 3A be backend/API only and Phase 3B be frontend workbench? Recommendation: yes.</li>
+      <li><strong>Response shape:</strong> resolved for Phase 3A: keep <code>/api/ingredients</code> compatibility and add richer <code>/api/workspace-ingredients</code>.</li>
+      <li><strong>Membership delete:</strong> should delete mean soft-delete or <code>active=false</code>? Recommendation: <code>active=false</code> for user intent, soft-delete only for true removal/audit cleanup.</li>
+      <li><strong>Stale price:</strong> should stale use a fixed threshold, workspace setting, or be deferred? Recommendation: defer stale until frontend workbench requirements are explicit.</li>
+      <li><strong>Write auto-link:</strong> resolved for Phase 3A: <code>POST /api/prices</code> and <code>POST /api/recipes/:id/ingredients</code> auto-ensure membership for valid global ingredients. Strict non-member rejection is deferred until the frontend uses <code>/api/workspace-ingredients</code>.</li>
+    </ul>
+  </section>
+
+  <section class="note">
+    <h2>Frontend Follow-Up</h2>
+    <p>
+      The frontend workbench should be planned in the sibling <code>jerky-vault</code> repository after this API plan is approved. Expected frontend changes: send selected workspace context, switch price and recipe pickers to <code>/api/workspace-ingredients</code>, add global dictionary search/add flow, make price update the primary action, and add filters for type plus price state. After that switch, backend write paths can move from compatibility auto-linking to strict non-member rejection.
+    </p>
+  </section>
+
+  <section class="note">
+    <h2>Implementation Results</h2>
+    <ul>
+      <li>Added <code>models.WorkspaceIngredient</code> with workspace and ingredient relations, active flag, metadata fields, and transient <code>latest_price</code>.</li>
+      <li>Added migration/index wiring, including a partial unique index on active logical <code>(workspace_id, ingredient_id)</code> membership.</li>
+      <li>Added <code>BackfillWorkspaceIngredients</code> from active prices, recipe ingredients through active recipes, and cooking session ingredients through active cooking sessions.</li>
+      <li>Added <code>EnsureWorkspaceIngredient</code> and <code>IngredientInWorkspace</code>; ensure reactivates inactive or soft-deleted membership rows.</li>
+      <li>Kept <code>GET /api/ingredients</code> global for compatibility and added <code>GET /api/ingredients/search</code>.</li>
+      <li>Added <code>GET</code>, <code>POST</code>, <code>PATCH</code>, and <code>DELETE</code> routes for <code>/api/workspace-ingredients</code>.</li>
+      <li>Changed <code>POST /api/ingredients</code> so new ingredients and existing-name conflicts both ensure active workspace membership.</li>
+      <li>Changed <code>POST /api/prices</code> and <code>POST /api/recipes/:id/ingredients</code> to auto-ensure membership for valid global ingredients while still rejecting invalid ids.</li>
+      <li>Added behavioral coverage for explicit <code>/api/workspace-ingredients</code> endpoints: idempotent link, metadata patch, partial update, and deactivate without deleting the global ingredient.</li>
+      <li>Regenerated Swagger artifacts: <code>docs/docs.go</code>, <code>docs/swagger.json</code>, and <code>docs/swagger.yaml</code>.</li>
+    </ul>
+    <h3>Checks Run</h3>
+    <ul>
+      <li><code>go run github.com/swaggo/swag/cmd/swag@v1.16.3 init -g main.go</code></li>
+      <li><code>go build ./...</code></li>
+      <li><code>go vet ./...</code></li>
+      <li><code>go test ./...</code></li>
+      <li><code>git diff --check</code></li>
+    </ul>
+    <h3>Known Limitations and Follow-Up</h3>
+    <ul>
+      <li>Strict non-member rejection is intentionally deferred until the web and mobile clients switch to scoped workspace ingredient pickers.</li>
+      <li>Manual production DB verification is still required during deployment: active usage should have zero unmapped workspace ingredient memberships after startup backfill.</li>
+      <li>The frontend and mobile workbench rollout should be tracked separately from this backend compatibility PR.</li>
+    </ul>
+  </section>
+
+  <section class="approval">
+    <h2>Approval Gate</h2>
+    <p>
+      Implementation must not start until this plan is explicitly approved. Production code changes should happen only on <code>codex/workspace-ingredients-phase-3-plan</code> or a fresh implementation branch created from it.
+    </p>
+  </section>
+</main>
+</body>
+</html>

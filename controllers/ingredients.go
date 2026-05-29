@@ -1,12 +1,15 @@
 package controllers
 
 import (
+	"errors"
 	"mobile-backend-go/database"
 	"mobile-backend-go/models"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // CreateIngredient creates a new ingredient
@@ -24,6 +27,7 @@ import (
 // @Router /api/ingredients [post]
 func CreateIngredient(c *gin.Context) {
 	var newIngredient models.Ingredient
+	workspaceID := c.MustGet("workspaceID").(uint)
 
 	if err := c.ShouldBindJSON(&newIngredient); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -47,18 +51,48 @@ func CreateIngredient(c *gin.Context) {
 	// Check name uniqueness
 	var existingIngredient models.Ingredient
 	if err := database.DB.Where("name = ?", newIngredient.Name).First(&existingIngredient).Error; err == nil {
+		workspaceIngredient, ensureErr := database.EnsureWorkspaceIngredient(database.DB, workspaceID, existingIngredient.ID)
+		if ensureErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to link ingredient to workspace"})
+			return
+		}
 		c.JSON(http.StatusConflict, gin.H{
-			"error":       "Ingredient with this name already exists",
-			"field":       "name",
-			"value":       newIngredient.Name,
-			"existing_id": existingIngredient.ID,
+			"error":                   "Ingredient with this name already exists",
+			"field":                   "name",
+			"value":                   newIngredient.Name,
+			"existing_id":             existingIngredient.ID,
+			"workspace_ingredient_id": workspaceIngredient.ID,
+			"workspace_linked":        true,
 		})
 		return
 	}
 
-	if err := database.DB.Create(&newIngredient).Error; err != nil {
+	tx := database.DB.Begin()
+	if tx.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create ingredient"})
+		return
+	}
+
+	if err := tx.Create(&newIngredient).Error; err != nil {
+		tx.Rollback()
 		// Check if this is a database-level uniqueness error
 		if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
+			if err := database.DB.Where("name = ?", newIngredient.Name).First(&existingIngredient).Error; err == nil {
+				workspaceIngredient, ensureErr := database.EnsureWorkspaceIngredient(database.DB, workspaceID, existingIngredient.ID)
+				if ensureErr != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to link ingredient to workspace"})
+					return
+				}
+				c.JSON(http.StatusConflict, gin.H{
+					"error":                   "Ingredient with this name already exists",
+					"field":                   "name",
+					"value":                   newIngredient.Name,
+					"existing_id":             existingIngredient.ID,
+					"workspace_ingredient_id": workspaceIngredient.ID,
+					"workspace_linked":        true,
+				})
+				return
+			}
 			c.JSON(http.StatusConflict, gin.H{
 				"error": "Ingredient with this name already exists",
 				"field": "name",
@@ -70,7 +104,26 @@ func CreateIngredient(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, newIngredient)
+	workspaceIngredient, err := database.EnsureWorkspaceIngredient(tx, workspaceID, newIngredient.ID)
+	if err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to link ingredient to workspace"})
+		return
+	}
+	if err := tx.Commit().Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create ingredient"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"id":                      newIngredient.ID,
+		"created_at":              newIngredient.CreatedAt,
+		"updated_at":              newIngredient.UpdatedAt,
+		"type":                    newIngredient.Type,
+		"name":                    newIngredient.Name,
+		"workspace_ingredient_id": workspaceIngredient.ID,
+		"workspace_linked":        true,
+	})
 }
 
 // CheckIngredientExists checks if ingredient exists by name
@@ -128,4 +181,200 @@ func GetIngredients(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, ingredients)
+}
+
+// SearchIngredients searches the global ingredient dictionary.
+// @Summary Search global ingredients
+// @Description Search global ingredients by name
+// @Tags Ingredients
+// @Security BearerAuth
+// @Produce  json
+// @Param query query string false "Search query"
+// @Success 200 {array} models.Ingredient
+// @Failure 500 {object} map[string]string "Internal Server Error"
+// @Router /api/ingredients/search [get]
+func SearchIngredients(c *gin.Context) {
+	query := strings.TrimSpace(c.Query("query"))
+	db := database.DB.Order("name ASC").Limit(50)
+	if query != "" {
+		db = db.Where("LOWER(name) LIKE LOWER(?)", "%"+query+"%")
+	}
+
+	var ingredients []models.Ingredient
+	if err := db.Find(&ingredients).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to search ingredients"})
+		return
+	}
+
+	c.JSON(http.StatusOK, ingredients)
+}
+
+// GetWorkspaceIngredients returns active ingredients for the current workspace.
+// @Summary Get workspace ingredients
+// @Description Get active ingredients in the current workspace working set
+// @Tags Workspace Ingredients
+// @Security BearerAuth
+// @Produce  json
+// @Param X-Workspace-ID header int false "Workspace ID"
+// @Success 200 {array} models.WorkspaceIngredient
+// @Failure 500 {object} map[string]string "Internal Server Error"
+// @Router /api/workspace-ingredients [get]
+func GetWorkspaceIngredients(c *gin.Context) {
+	workspaceID := c.MustGet("workspaceID").(uint)
+
+	var workspaceIngredients []models.WorkspaceIngredient
+	if err := database.DB.
+		Joins("JOIN ingredients ON ingredients.id = workspace_ingredients.ingredient_id").
+		Where("workspace_ingredients.workspace_id = ? AND workspace_ingredients.active = ?", workspaceID, true).
+		Preload("Ingredient").
+		Order("ingredients.name ASC").
+		Find(&workspaceIngredients).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch workspace ingredients"})
+		return
+	}
+	attachLatestWorkspacePrices(workspaceID, workspaceIngredients)
+
+	c.JSON(http.StatusOK, workspaceIngredients)
+}
+
+// AddWorkspaceIngredient links an existing ingredient to the current workspace.
+// @Summary Add workspace ingredient
+// @Description Add an existing global ingredient to the current workspace working set
+// @Tags Workspace Ingredients
+// @Security BearerAuth
+// @Accept  json
+// @Produce  json
+// @Param X-Workspace-ID header int false "Workspace ID"
+// @Param ingredient body models.WorkspaceIngredientCreateDTO true "Workspace ingredient data"
+// @Success 201 {object} models.WorkspaceIngredient
+// @Failure 400 {object} map[string]string "Bad request"
+// @Failure 500 {object} map[string]string "Internal Server Error"
+// @Router /api/workspace-ingredients [post]
+func AddWorkspaceIngredient(c *gin.Context) {
+	workspaceID := c.MustGet("workspaceID").(uint)
+
+	var requestData models.WorkspaceIngredientCreateDTO
+	if err := c.ShouldBindJSON(&requestData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	workspaceIngredient, err := database.EnsureWorkspaceIngredient(database.DB, workspaceID, requestData.IngredientID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ingredient ID"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to link ingredient to workspace"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, workspaceIngredient)
+}
+
+// UpdateWorkspaceIngredient updates workspace ingredient metadata.
+// @Summary Update workspace ingredient
+// @Description Update workspace ingredient metadata in the current workspace
+// @Tags Workspace Ingredients
+// @Security BearerAuth
+// @Accept  json
+// @Produce  json
+// @Param X-Workspace-ID header int false "Workspace ID"
+// @Param id path int true "Workspace ingredient ID"
+// @Param ingredient body models.WorkspaceIngredientUpdateDTO true "Workspace ingredient update"
+// @Success 200 {object} models.WorkspaceIngredient
+// @Failure 400 {object} map[string]string "Bad request"
+// @Failure 404 {object} map[string]string "Workspace ingredient not found"
+// @Failure 500 {object} map[string]string "Internal Server Error"
+// @Router /api/workspace-ingredients/{id} [patch]
+func UpdateWorkspaceIngredient(c *gin.Context) {
+	workspaceID := c.MustGet("workspaceID").(uint)
+	workspaceIngredientID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid workspace ingredient ID"})
+		return
+	}
+
+	var requestData models.WorkspaceIngredientUpdateDTO
+	if err := c.ShouldBindJSON(&requestData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	var workspaceIngredient models.WorkspaceIngredient
+	if err := database.DB.Where("id = ? AND workspace_id = ?", workspaceIngredientID, workspaceID).First(&workspaceIngredient).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Workspace ingredient not found"})
+		return
+	}
+
+	updates := map[string]interface{}{}
+	if requestData.Active != nil {
+		updates["active"] = *requestData.Active
+	}
+	if requestData.Alias != nil {
+		updates["alias"] = strings.TrimSpace(*requestData.Alias)
+	}
+	if requestData.Category != nil {
+		updates["category"] = strings.TrimSpace(*requestData.Category)
+	}
+
+	if len(updates) > 0 {
+		if err := database.DB.Model(&workspaceIngredient).Updates(updates).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update workspace ingredient"})
+			return
+		}
+	}
+	if err := database.DB.Preload("Ingredient").First(&workspaceIngredient, workspaceIngredient.ID).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch workspace ingredient"})
+		return
+	}
+
+	c.JSON(http.StatusOK, workspaceIngredient)
+}
+
+// DeleteWorkspaceIngredient deactivates a workspace ingredient.
+// @Summary Delete workspace ingredient
+// @Description Deactivate an ingredient in the current workspace working set
+// @Tags Workspace Ingredients
+// @Security BearerAuth
+// @Param X-Workspace-ID header int false "Workspace ID"
+// @Param id path int true "Workspace ingredient ID"
+// @Success 200 {object} map[string]string "Workspace ingredient deactivated"
+// @Failure 400 {object} map[string]string "Bad request"
+// @Failure 404 {object} map[string]string "Workspace ingredient not found"
+// @Failure 500 {object} map[string]string "Internal Server Error"
+// @Router /api/workspace-ingredients/{id} [delete]
+func DeleteWorkspaceIngredient(c *gin.Context) {
+	workspaceID := c.MustGet("workspaceID").(uint)
+	workspaceIngredientID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid workspace ingredient ID"})
+		return
+	}
+
+	result := database.DB.Model(&models.WorkspaceIngredient{}).
+		Where("id = ? AND workspace_id = ?", workspaceIngredientID, workspaceID).
+		Update("active", false)
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to deactivate workspace ingredient"})
+		return
+	}
+	if result.RowsAffected == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Workspace ingredient not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Workspace ingredient deactivated"})
+}
+
+func attachLatestWorkspacePrices(workspaceID uint, workspaceIngredients []models.WorkspaceIngredient) {
+	for index := range workspaceIngredients {
+		var latestPrice models.Price
+		if err := database.DB.
+			Where("workspace_id = ? AND ingredient_id = ?", workspaceID, workspaceIngredients[index].IngredientID).
+			Order("date DESC").
+			First(&latestPrice).Error; err == nil {
+			workspaceIngredients[index].LatestPrice = &latestPrice
+		}
+	}
 }

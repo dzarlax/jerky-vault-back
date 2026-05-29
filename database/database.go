@@ -45,6 +45,7 @@ func ConnectDatabase() {
 		&models.WorkspaceMember{},
 		&models.Recipe{},
 		&models.Ingredient{},
+		&models.WorkspaceIngredient{},
 		&models.RecipeIngredient{},
 		&models.Price{},
 		&models.CookingSession{},
@@ -74,6 +75,10 @@ func ConnectDatabase() {
 
 	if err := BackfillBusinessWorkspaces(DB); err != nil {
 		log.Fatal("Business workspace backfill error: ", err)
+	}
+
+	if err := BackfillWorkspaceIngredients(DB); err != nil {
+		log.Fatal("Workspace ingredient backfill error: ", err)
 	}
 
 	backfillOrderDates()
@@ -117,6 +122,12 @@ func createIndexes() {
 
 	// Ingredients: frequently filtered by name
 	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_ingredients_name ON ingredients(name)`)
+
+	// Workspace Ingredients: active workspace working-set membership
+	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_workspace_ingredients_workspace_id ON workspace_ingredients(workspace_id)`)
+	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_workspace_ingredients_ingredient_id ON workspace_ingredients(ingredient_id)`)
+	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_workspace_ingredients_workspace_active ON workspace_ingredients(workspace_id, active)`)
+	DB.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_workspace_ingredients_workspace_ingredient_active_unique ON workspace_ingredients(workspace_id, ingredient_id) WHERE deleted_at IS NULL`)
 
 	// Workspaces: frequently resolved by personal owner and membership
 	DB.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_workspaces_personal_user_id_active_unique ON workspaces(personal_user_id) WHERE personal_user_id IS NOT NULL AND deleted_at IS NULL`)
