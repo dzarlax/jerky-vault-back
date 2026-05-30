@@ -71,13 +71,22 @@ func TestCalculateIngredientCost(t *testing.T) {
 			want:              4,
 		},
 		{
-			name:              "unknown unit",
+			name:              "same custom unit",
 			price:             10,
-			priceQuantity:     1,
+			priceQuantity:     2,
 			priceUnit:         "bag",
 			recipeQuantityStr: "1",
 			recipeUnit:        "bag",
-			wantErr:           true,
+			want:              5,
+		},
+		{
+			name:              "empty units count style",
+			price:             10,
+			priceQuantity:     2,
+			priceUnit:         "",
+			recipeQuantityStr: "1",
+			recipeUnit:        "",
+			want:              5,
 		},
 		{
 			name:              "incompatible units",
@@ -146,6 +155,9 @@ func TestCalculateIngredientCostSupportedConversions(t *testing.T) {
 		{name: "ml to ml", priceQuantity: 500, priceUnit: "ml", recipeQty: "250", recipeUnit: "ml", want: 50},
 		{name: "pcs to pcs", priceQuantity: 4, priceUnit: "pcs", recipeQty: "3", recipeUnit: "pcs", want: 75},
 		{name: "case and whitespace normalized", priceQuantity: 2, priceUnit: " KG ", recipeQty: "500", recipeUnit: " G ", want: 25},
+		{name: "empty unit to empty unit", priceQuantity: 4, priceUnit: "", recipeQty: "3", recipeUnit: "", want: 75},
+		{name: "custom unit to same custom unit", priceQuantity: 4, priceUnit: "bag", recipeQty: "3", recipeUnit: "bag", want: 75},
+		{name: "custom unit case and whitespace normalized", priceQuantity: 4, priceUnit: " Bag ", recipeQty: "3", recipeUnit: " bag ", want: 75},
 	}
 
 	for _, tt := range tests {
@@ -173,6 +185,8 @@ func TestCalculateIngredientCostRejectsIncompatibleDimensions(t *testing.T) {
 		{name: "mass to count", priceUnit: "g", recipeUnit: "pcs"},
 		{name: "count to volume", priceUnit: "pcs", recipeUnit: "ml"},
 		{name: "volume to count", priceUnit: "ml", recipeUnit: "pcs"},
+		{name: "custom to different custom", priceUnit: "bag", recipeUnit: "box"},
+		{name: "empty count to custom", priceUnit: "", recipeUnit: "bag"},
 	}
 
 	for _, tt := range tests {

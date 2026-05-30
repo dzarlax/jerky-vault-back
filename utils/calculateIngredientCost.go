@@ -20,14 +20,8 @@ func CalculateIngredientCost(price float64, priceQuantity int, priceUnit string,
 		return 0, errors.New("recipe quantity cannot be negative")
 	}
 
-	priceDimension, priceFactor, err := normalizeIngredientUnit(priceUnit)
-	if err != nil {
-		return 0, err
-	}
-	recipeDimension, recipeFactor, err := normalizeIngredientUnit(recipeUnit)
-	if err != nil {
-		return 0, err
-	}
+	priceDimension, priceFactor := normalizeIngredientUnit(priceUnit)
+	recipeDimension, recipeFactor := normalizeIngredientUnit(recipeUnit)
 	if priceDimension != recipeDimension {
 		return 0, fmt.Errorf("incompatible units: %s and %s", priceUnit, recipeUnit)
 	}
@@ -39,19 +33,22 @@ func CalculateIngredientCost(price float64, priceQuantity int, priceUnit string,
 	return unitPrice * baseRecipeQuantity, nil
 }
 
-func normalizeIngredientUnit(unit string) (string, float64, error) {
-	switch strings.ToLower(strings.TrimSpace(unit)) {
+func normalizeIngredientUnit(unit string) (string, float64) {
+	normalized := strings.ToLower(strings.TrimSpace(unit))
+	switch normalized {
+	case "":
+		return "count", 1
 	case "kg":
-		return "mass", 1000, nil
+		return "mass", 1000
 	case "g":
-		return "mass", 1, nil
+		return "mass", 1
 	case "l":
-		return "volume", 1000, nil
+		return "volume", 1000
 	case "ml":
-		return "volume", 1, nil
+		return "volume", 1
 	case "pcs":
-		return "count", 1, nil
+		return "count", 1
 	default:
-		return "", 0, fmt.Errorf("unsupported unit: %s", unit)
+		return "custom:" + normalized, 1
 	}
 }

@@ -220,7 +220,7 @@
   <section>
     <h2>Known Limitations</h2>
     <ul>
-      <li>Supported units are intentionally conservative: <code>kg</code>, <code>g</code>, <code>l</code>, <code>ml</code>, and <code>pcs</code>. Other aliases should be added only after confirming frontend/data usage.</li>
+      <li>Supported convertible units are intentionally conservative: <code>kg</code>, <code>g</code>, <code>l</code>, <code>ml</code>, and <code>pcs</code>. Empty units and matching custom units are treated as count-style units for backward compatibility with existing unitless data.</li>
       <li>Recipe read handlers still skip individual ingredient calculation errors instead of surfacing warnings or failing the request. This preserves existing response behavior but can hide malformed historical units.</li>
       <li>Money fields remain <code>float64</code>; integer minor-unit storage is out of scope for this correction.</li>
       <li>Swagger was not regenerated because no public field names or route annotations changed.</li>
