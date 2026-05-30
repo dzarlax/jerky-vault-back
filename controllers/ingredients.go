@@ -384,7 +384,7 @@ func attachLatestWorkspacePrices(workspaceID uint, workspaceIngredients []models
 		var latestPrice models.Price
 		if err := database.DB.
 			Where("workspace_id = ? AND ingredient_id = ?", workspaceID, workspaceIngredients[index].IngredientID).
-			Order("date DESC").
+			Order(latestPriceOrder).
 			First(&latestPrice).Error; err == nil {
 			workspaceIngredients[index].LatestPrice = &latestPrice
 		}

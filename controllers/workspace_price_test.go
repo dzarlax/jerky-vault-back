@@ -218,6 +218,53 @@ func TestGetRecipeCostUsesActiveWorkspacePrice(t *testing.T) {
 	assertAttachedLatestPrice(t, secondRecipe, 20, fixture.SecondWorkspace.ID)
 }
 
+func TestGetRecipeCostUsesNewestPriceWhenDatesTie(t *testing.T) {
+	fixture := setupWorkspacePriceTest(t)
+	priceDate := time.Date(2026, time.May, 30, 0, 0, 0, 0, time.UTC)
+
+	createPriceWithTimes(t, fixture.User.ID, fixture.PersonalWorkspace.ID, fixture.Ingredient.ID, 10, priceDate, priceDate.Add(time.Hour))
+	createPriceWithTimes(t, fixture.User.ID, fixture.PersonalWorkspace.ID, fixture.Ingredient.ID, 30, priceDate, priceDate.Add(2*time.Hour))
+
+	recipe := getRecipeForWorkspace(t, fixture, fixture.PersonalWorkspace.ID)
+	if recipe.TotalCost != 30 {
+		t.Fatalf("recipe total with tied price dates = %v, want 30", recipe.TotalCost)
+	}
+	assertAttachedLatestPrice(t, recipe, 30, fixture.PersonalWorkspace.ID)
+}
+
+func TestGetRecipeCostSumsMixedUnitIngredientCosts(t *testing.T) {
+	fixture := setupWorkspacePriceTest(t)
+
+	oil := models.Ingredient{Name: "Oil", Type: "sauce"}
+	tray := models.Ingredient{Name: "Tray", Type: "package"}
+	if err := database.DB.Create(&oil).Error; err != nil {
+		t.Fatalf("create oil ingredient: %v", err)
+	}
+	if err := database.DB.Create(&tray).Error; err != nil {
+		t.Fatalf("create tray ingredient: %v", err)
+	}
+
+	extraIngredients := []models.RecipeIngredient{
+		{RecipeID: fixture.Recipe.ID, IngredientID: oil.ID, Quantity: "0.5", Unit: "l"},
+		{RecipeID: fixture.Recipe.ID, IngredientID: tray.ID, Quantity: "2", Unit: "pcs"},
+	}
+	if err := database.DB.Create(&extraIngredients).Error; err != nil {
+		t.Fatalf("create extra recipe ingredients: %v", err)
+	}
+
+	createPriceWithUnit(t, fixture.User.ID, fixture.PersonalWorkspace.ID, fixture.Ingredient.ID, 10, 500, "g")
+	createPriceWithUnit(t, fixture.User.ID, fixture.PersonalWorkspace.ID, oil.ID, 12, 2, "l")
+	createPriceWithUnit(t, fixture.User.ID, fixture.PersonalWorkspace.ID, tray.ID, 6, 3, "pcs")
+
+	recipe := getRecipeForWorkspace(t, fixture, fixture.PersonalWorkspace.ID)
+	if recipe.TotalCost != 27 {
+		t.Fatalf("mixed unit recipe total = %v, want 27", recipe.TotalCost)
+	}
+	assertRecipeIngredientCost(t, recipe, fixture.Ingredient.ID, 20)
+	assertRecipeIngredientCost(t, recipe, oil.ID, 3)
+	assertRecipeIngredientCost(t, recipe, tray.ID, 4)
+}
+
 func TestGetRecipeCostIsZeroWhenWorkspaceHasNoPrice(t *testing.T) {
 	fixture := setupWorkspacePriceTest(t)
 
@@ -238,14 +285,41 @@ func TestGetRecipeCostIsZeroWhenWorkspaceHasNoPrice(t *testing.T) {
 func createPrice(t *testing.T, userID uint, workspaceID uint, ingredientID uint, value float64) {
 	t.Helper()
 
+	createPriceWithTimes(t, userID, workspaceID, ingredientID, value, time.Now(), time.Time{})
+}
+
+func createPriceWithUnit(t *testing.T, userID uint, workspaceID uint, ingredientID uint, value float64, quantity int, unit string) {
+	t.Helper()
+
+	price := models.Price{
+		IngredientID: ingredientID,
+		Price:        value,
+		Quantity:     quantity,
+		Unit:         unit,
+		Date:         time.Now(),
+		UserID:       userID,
+		WorkspaceID:  &workspaceID,
+	}
+	if err := database.DB.Create(&price).Error; err != nil {
+		t.Fatalf("create price with unit: %v", err)
+	}
+}
+
+func createPriceWithTimes(t *testing.T, userID uint, workspaceID uint, ingredientID uint, value float64, priceDate time.Time, createdAt time.Time) {
+	t.Helper()
+
 	price := models.Price{
 		IngredientID: ingredientID,
 		Price:        value,
 		Quantity:     1,
 		Unit:         "kg",
-		Date:         time.Now(),
+		Date:         priceDate,
 		UserID:       userID,
 		WorkspaceID:  &workspaceID,
+	}
+	if !createdAt.IsZero() {
+		price.CreatedAt = createdAt
+		price.UpdatedAt = createdAt
 	}
 	if err := database.DB.Create(&price).Error; err != nil {
 		t.Fatalf("create price: %v", err)
@@ -305,6 +379,21 @@ func assertAttachedLatestPrice(t *testing.T, recipe models.Recipe, wantPrice flo
 	if prices[0].WorkspaceID == nil || *prices[0].WorkspaceID != wantWorkspaceID {
 		t.Fatalf("attached latest price workspace = %v, want %d", prices[0].WorkspaceID, wantWorkspaceID)
 	}
+}
+
+func assertRecipeIngredientCost(t *testing.T, recipe models.Recipe, ingredientID uint, want float64) {
+	t.Helper()
+
+	for _, ingredient := range recipe.RecipeIngredients {
+		if ingredient.IngredientID != ingredientID {
+			continue
+		}
+		if ingredient.CalculatedCost != want {
+			t.Fatalf("ingredient %d calculated cost = %v, want %v", ingredientID, ingredient.CalculatedCost, want)
+		}
+		return
+	}
+	t.Fatalf("ingredient %d not found in recipe", ingredientID)
 }
 
 func uintToString(value uint) string {

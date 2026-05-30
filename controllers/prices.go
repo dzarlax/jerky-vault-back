@@ -11,6 +11,8 @@ import (
 	"time"
 )
 
+const latestPriceOrder = "date DESC, created_at DESC, id DESC"
+
 // AddPrice adds a new price
 // @Summary Add a new price
 // @Description Add a new price for an ingredient
@@ -135,7 +137,7 @@ func GetPrices(c *gin.Context) {
 	if validSortColumns[sortColumn] && validSortDirections[sortDirection] {
 		query = query.Order(sortColumn + " " + sortDirection)
 	} else {
-		query = query.Order("date DESC")
+		query = query.Order(latestPriceOrder)
 	}
 
 	if err := query.Preload("Ingredient").Find(&prices).Error; err != nil {

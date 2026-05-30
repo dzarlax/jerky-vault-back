@@ -329,6 +329,157 @@ func TestDashboardUsesActiveWorkspace(t *testing.T) {
 	}
 }
 
+func TestDashboardAndProfitCalculateMultipleOrderItems(t *testing.T) {
+	fixture := setupWorkspaceBusinessTest(t)
+
+	extraProduct := models.Product{Name: "Extra product", Price: 7, Cost: 2, UserID: fixture.User.ID, WorkspaceID: &fixture.PersonalWorkspace.ID, PackageID: fixture.PersonalPackage.ID}
+	if err := database.DB.Create(&extraProduct).Error; err != nil {
+		t.Fatalf("create extra product: %v", err)
+	}
+	extraItems := []models.OrderItem{
+		{OrderID: fixture.PersonalOrder.ID, ProductID: fixture.PersonalProduct.ID, Quantity: 3, Price: 2.5, Cost_price: 1.5},
+		{OrderID: fixture.PersonalOrder.ID, ProductID: extraProduct.ID, Quantity: 4, Price: 7, Cost_price: 2},
+	}
+	if err := database.DB.Create(&extraItems).Error; err != nil {
+		t.Fatalf("create extra order items: %v", err)
+	}
+
+	response := runWorkspaceRequest(fixture.User.ID, fixture.PersonalWorkspace.ID, GetDashboardData, http.MethodGet, "/dashboard", "/dashboard")
+	if response.Code != http.StatusOK {
+		t.Fatalf("dashboard status = %d body = %s", response.Code, response.Body.String())
+	}
+	var dashboard DashboardData
+	if err := json.Unmarshal(response.Body.Bytes(), &dashboard); err != nil {
+		t.Fatalf("decode dashboard: %v", err)
+	}
+	if len(dashboard.RecentOrders) != 1 {
+		t.Fatalf("recent order count = %d, want 1", len(dashboard.RecentOrders))
+	}
+	if dashboard.RecentOrders[0].TotalAmount != 59.5 {
+		t.Fatalf("recent order total = %v, want 59.5", dashboard.RecentOrders[0].TotalAmount)
+	}
+
+	response = runWorkspaceRequest(fixture.User.ID, fixture.PersonalWorkspace.ID, GetProfitData, http.MethodGet, "/dashboard/profit", "/dashboard/profit")
+	if response.Code != http.StatusOK {
+		t.Fatalf("profit status = %d body = %s", response.Code, response.Body.String())
+	}
+	var profit ProfitData
+	if err := json.Unmarshal(response.Body.Bytes(), &profit); err != nil {
+		t.Fatalf("decode profit: %v", err)
+	}
+	if profit.TotalRevenue != 59.5 || profit.TotalCosts != 22.5 || profit.TotalProfit != 37 || profit.OrderCount != 1 {
+		t.Fatalf("profit = %+v, want revenue 59.5 costs 22.5 profit 37 count 1", profit)
+	}
+}
+
+func TestAddOrderPreservesExplicitZeroCostPrice(t *testing.T) {
+	fixture := setupWorkspaceBusinessTest(t)
+
+	fallbackPayload := map[string]any{
+		"client_id": fixture.PersonalClient.ID,
+		"status":    constants.OrderStatusFinished,
+		"items": []map[string]any{
+			{
+				"product_id": fixture.PersonalProduct.ID,
+				"quantity":   1,
+				"price":      10,
+			},
+		},
+	}
+	fallbackResponse := runWorkspaceJSONRequest(fixture.User.ID, fixture.PersonalWorkspace.ID, AddOrder, http.MethodPost, "/orders", "/orders", fallbackPayload)
+	if fallbackResponse.Code != http.StatusCreated {
+		t.Fatalf("add fallback order status = %d body = %s", fallbackResponse.Code, fallbackResponse.Body.String())
+	}
+	var fallbackOrder models.Order
+	if err := json.Unmarshal(fallbackResponse.Body.Bytes(), &fallbackOrder); err != nil {
+		t.Fatalf("decode fallback order: %v", err)
+	}
+	if len(fallbackOrder.Items) != 1 || fallbackOrder.Items[0].Cost_price != fixture.PersonalProduct.Cost {
+		t.Fatalf("omitted cost_price item = %+v, want product cost %v", fallbackOrder.Items, fixture.PersonalProduct.Cost)
+	}
+
+	payload := map[string]any{
+		"client_id": fixture.PersonalClient.ID,
+		"status":    constants.OrderStatusFinished,
+		"items": []map[string]any{
+			{
+				"product_id": fixture.PersonalProduct.ID,
+				"quantity":   1,
+				"price":      10,
+				"cost_price": 0,
+			},
+		},
+	}
+	response := runWorkspaceJSONRequest(fixture.User.ID, fixture.PersonalWorkspace.ID, AddOrder, http.MethodPost, "/orders", "/orders", payload)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("add order status = %d body = %s", response.Code, response.Body.String())
+	}
+
+	var order models.Order
+	if err := json.Unmarshal(response.Body.Bytes(), &order); err != nil {
+		t.Fatalf("decode order: %v", err)
+	}
+	if len(order.Items) != 1 {
+		t.Fatalf("created order item count = %d, want 1", len(order.Items))
+	}
+	if order.Items[0].Cost_price != 0 {
+		t.Fatalf("explicit zero cost_price stored as %v, want 0", order.Items[0].Cost_price)
+	}
+
+	profitResponse := runWorkspaceRequest(fixture.User.ID, fixture.PersonalWorkspace.ID, GetProfitData, http.MethodGet, "/dashboard/profit", "/dashboard/profit")
+	if profitResponse.Code != http.StatusOK {
+		t.Fatalf("profit status = %d body = %s", profitResponse.Code, profitResponse.Body.String())
+	}
+	var profit ProfitData
+	if err := json.Unmarshal(profitResponse.Body.Bytes(), &profit); err != nil {
+		t.Fatalf("decode profit: %v", err)
+	}
+	if profit.TotalRevenue != 44 || profit.TotalCosts != 15 || profit.TotalProfit != 29 || profit.OrderCount != 3 {
+		t.Fatalf("profit after explicit zero cost order = %+v, want revenue 44 costs 15 profit 29 count 3", profit)
+	}
+}
+
+func TestUpdateOrderPreservesExplicitZeroCostPrice(t *testing.T) {
+	fixture := setupWorkspaceBusinessTest(t)
+
+	payload := map[string]any{
+		"client_id": fixture.PersonalClient.ID,
+		"date":      fixture.PersonalOrder.Date,
+		"status":    constants.OrderStatusFinished,
+		"items": []map[string]any{
+			{
+				"product_id": fixture.PersonalProduct.ID,
+				"quantity":   1,
+				"price":      10,
+				"cost_price": 0,
+			},
+		},
+	}
+	response := runWorkspaceJSONRequest(
+		fixture.User.ID,
+		fixture.PersonalWorkspace.ID,
+		UpdateOrder,
+		http.MethodPut,
+		"/orders/:id",
+		"/orders/"+uintToString(fixture.PersonalOrder.ID),
+		payload,
+	)
+	if response.Code != http.StatusOK {
+		t.Fatalf("update order status = %d body = %s", response.Code, response.Body.String())
+	}
+
+	var items []models.OrderItem
+	if err := database.DB.Where("order_id = ?", fixture.PersonalOrder.ID).Find(&items).Error; err != nil {
+		t.Fatalf("load updated order items: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("updated order item count = %d, want 1", len(items))
+	}
+	if items[0].Cost_price != 0 {
+		t.Fatalf("updated explicit zero cost_price stored as %v, want 0", items[0].Cost_price)
+	}
+}
+
 func assertWorkspaceList(
 	t *testing.T,
 	fixture workspaceBusinessFixture,
