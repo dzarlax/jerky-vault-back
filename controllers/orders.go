@@ -102,10 +102,10 @@ func AddOrder(c *gin.Context) {
 		Status   string    `json:"status"`
 		Comment  string    `json:"comment"`
 		Items    []struct {
-			ProductID uint    `json:"product_id" binding:"required"`
-			Quantity  int     `json:"quantity" binding:"required,min=1"`
-			Price     float64 `json:"price" binding:"required,min=0"`
-			CostPrice float64 `json:"cost_price" binding:"min=0"`
+			ProductID uint     `json:"product_id" binding:"required"`
+			Quantity  int      `json:"quantity" binding:"required,min=1"`
+			Price     float64  `json:"price" binding:"required,min=0"`
+			CostPrice *float64 `json:"cost_price" binding:"omitempty,min=0"`
 		} `json:"items" binding:"required,min=1"`
 	}
 
@@ -135,7 +135,7 @@ func AddOrder(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("items[%d].price cannot be negative", i)})
 			return
 		}
-		if item.CostPrice < 0 {
+		if item.CostPrice != nil && *item.CostPrice < 0 {
 			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("items[%d].cost_price cannot be negative", i)})
 			return
 		}
@@ -195,8 +195,8 @@ func AddOrder(c *gin.Context) {
 
 		// Determine cost_price: use provided value or get from product
 		costPrice := product.Cost // Default to product cost
-		if item.CostPrice != 0 {
-			costPrice = item.CostPrice // Use provided value if specified
+		if item.CostPrice != nil {
+			costPrice = *item.CostPrice // Use provided value if specified
 		}
 
 		orderItems = append(orderItems, models.OrderItem{
@@ -273,10 +273,10 @@ func UpdateOrder(c *gin.Context) {
 		Status   string    `json:"status"`
 		Comment  string    `json:"comment"`
 		Items    []struct {
-			ProductID uint    `json:"product_id" binding:"required"`
-			Quantity  int     `json:"quantity" binding:"required,min=1"`
-			Price     float64 `json:"price" binding:"required,min=0"`
-			CostPrice float64 `json:"cost_price" binding:"min=0"`
+			ProductID uint     `json:"product_id" binding:"required"`
+			Quantity  int      `json:"quantity" binding:"required,min=1"`
+			Price     float64  `json:"price" binding:"required,min=0"`
+			CostPrice *float64 `json:"cost_price" binding:"omitempty,min=0"`
 		} `json:"items" binding:"required,min=1"`
 	}
 
@@ -310,7 +310,7 @@ func UpdateOrder(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("items[%d].price cannot be negative", i)})
 			return
 		}
-		if item.CostPrice < 0 {
+		if item.CostPrice != nil && *item.CostPrice < 0 {
 			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("items[%d].cost_price cannot be negative", i)})
 			return
 		}
@@ -362,8 +362,8 @@ func UpdateOrder(c *gin.Context) {
 
 		// Determine cost_price: use provided value or get from product
 		costPrice := product.Cost // Default to product cost
-		if item.CostPrice != 0 {
-			costPrice = item.CostPrice // Use provided value if specified
+		if item.CostPrice != nil {
+			costPrice = *item.CostPrice // Use provided value if specified
 		}
 
 		newOrderItems = append(newOrderItems, models.OrderItem{

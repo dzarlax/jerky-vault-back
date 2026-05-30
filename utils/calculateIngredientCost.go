@@ -2,6 +2,7 @@ package utils
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 )
@@ -12,22 +13,45 @@ func CalculateIngredientCost(price float64, priceQuantity int, priceUnit string,
 	if err != nil {
 		return 0, errors.New("invalid recipe quantity")
 	}
-
-	var unitPrice float64
-
-	switch {
-	case priceUnit == "kg" && recipeUnit == "g":
-		unitPrice = price / (float64(priceQuantity) * 1000) // price per gram
-	case priceUnit == "g" && recipeUnit == "g":
-		unitPrice = price / float64(priceQuantity) // price per gram
-	case priceUnit == "l" && recipeUnit == "ml":
-		unitPrice = price / (float64(priceQuantity) * 1000) // price per milliliter
-	case priceUnit == "ml" && recipeUnit == "ml":
-		unitPrice = price / float64(priceQuantity) // price per milliliter
-	default:
-		unitPrice = price / float64(priceQuantity) // price per unit
+	if priceQuantity <= 0 {
+		return 0, errors.New("price quantity must be greater than zero")
+	}
+	if recipeQuantity < 0 {
+		return 0, errors.New("recipe quantity cannot be negative")
 	}
 
-	cost := unitPrice * recipeQuantity
-	return cost, nil
+	priceDimension, priceFactor, err := normalizeIngredientUnit(priceUnit)
+	if err != nil {
+		return 0, err
+	}
+	recipeDimension, recipeFactor, err := normalizeIngredientUnit(recipeUnit)
+	if err != nil {
+		return 0, err
+	}
+	if priceDimension != recipeDimension {
+		return 0, fmt.Errorf("incompatible units: %s and %s", priceUnit, recipeUnit)
+	}
+
+	basePriceQuantity := float64(priceQuantity) * priceFactor
+	baseRecipeQuantity := recipeQuantity * recipeFactor
+	unitPrice := price / basePriceQuantity
+
+	return unitPrice * baseRecipeQuantity, nil
+}
+
+func normalizeIngredientUnit(unit string) (string, float64, error) {
+	switch strings.ToLower(strings.TrimSpace(unit)) {
+	case "kg":
+		return "mass", 1000, nil
+	case "g":
+		return "mass", 1, nil
+	case "l":
+		return "volume", 1000, nil
+	case "ml":
+		return "volume", 1, nil
+	case "pcs":
+		return "count", 1, nil
+	default:
+		return "", 0, fmt.Errorf("unsupported unit: %s", unit)
+	}
 }

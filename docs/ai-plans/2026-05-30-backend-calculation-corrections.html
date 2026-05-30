@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Implementation Plan: Backend Calculation Corrections</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { margin: 0; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f6f7f9; color: #1f2937; line-height: 1.5; }
+    main { max-width: 1100px; margin: 0 auto; padding: 32px; }
+    section { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 16px 0; }
+    h1, h2, h3 { line-height: 1.2; margin-top: 0; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    ul, ol { padding-left: 22px; }
+    li { margin: 6px 0; }
+    .badge { display: inline-block; padding: 4px 10px; border-radius: 999px; background: #e5e7eb; font-size: 12px; font-weight: 600; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+    .card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; background: #fafafa; }
+    .risk { border-left: 4px solid #dc2626; }
+    .approval { border-left: 4px solid #d97706; }
+    .muted { color: #6b7280; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Implementation Plan: Backend Calculation Corrections</h1>
+  <p class="badge">Approval required before implementation</p>
+
+  <section>
+    <h2>Task Summary</h2>
+    <p>
+      Correct backend calculation behavior for recipe ingredient costs, latest workspace price selection, and order item cost handling.
+      The goal is to remove silent wrong totals while keeping existing workspace-scoped data boundaries intact.
+    </p>
+  </section>
+
+  <section>
+    <h2>Inspected Current Behavior</h2>
+    <div class="grid">
+      <div class="card">
+        <h3>Recipe Cost</h3>
+        <p>
+          <code>utils.CalculateIngredientCost</code> converts <code>kg -&gt; g</code>, <code>g -&gt; g</code>, <code>l -&gt; ml</code>, and <code>ml -&gt; ml</code>.
+          All other unit pairs fall through to <code>price / priceQuantity * recipeQuantity</code>.
+        </p>
+      </div>
+      <div class="card">
+        <h3>Recipe Totals</h3>
+        <p>
+          <code>controllers/recipes.go</code> recalculates <code>calculated_cost</code> and <code>total_cost</code> from the latest workspace price for each ingredient.
+          Invalid cost calculations are currently skipped, leaving partial totals.
+        </p>
+      </div>
+      <div class="card">
+        <h3>Latest Price</h3>
+        <p>
+          Recipe and workspace ingredient lookups order prices by <code>date DESC</code> only.
+          Multiple prices with the same business date can produce nondeterministic results.
+        </p>
+      </div>
+      <div class="card">
+        <h3>Order Costs</h3>
+        <p>
+          <code>AddOrder</code> and <code>UpdateOrder</code> treat <code>cost_price == 0</code> as "not provided" and replace it with <code>product.Cost</code>,
+          even though request validation allows zero.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Desired Behavior</h2>
+    <ul>
+      <li>Recipe cost conversion supports both directions for mass and volume: <code>kg</code>/<code>g</code> and <code>l</code>/<code>ml</code>.</li>
+      <li>Same-unit prices continue to work for mass, volume, and count-like units.</li>
+      <li>Unsupported cross-dimension pairs, empty units where a conversion is required, and unknown units do not produce silent numbers.</li>
+      <li>Latest price lookups use deterministic ordering, preferably <code>date DESC, created_at DESC, id DESC</code>.</li>
+      <li>Order item <code>cost_price</code> can distinguish "field omitted" from "explicitly set to zero".</li>
+      <li>Dashboard revenue, cost, and profit formulas stay unchanged, but receive corrected stored order item costs.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Assumptions and Unknowns</h2>
+    <ul>
+      <li>Supported ingredient units are currently implicit in API usage and docs, not centralized in code.</li>
+      <li>Count-like units may include empty string, <code>unit</code>, <code>pcs</code>, or other UI values; exact accepted names need either existing frontend confirmation or a conservative backend allowlist.</li>
+      <li>Changing unsupported unit handling from silent fallback to an error may alter API responses for malformed existing recipe ingredients.</li>
+      <li>No database migration is expected unless we decide to persist normalized units or add direct schema constraints later.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Files Likely to Change</h2>
+    <ul>
+      <li><code>utils/calculateIngredientCost.go</code> - replace the fallback calculation with explicit normalization, conversion factors, and validation errors.</li>
+      <li><code>utils/calculateIngredientCost_test.go</code> - add focused table tests for conversions, decimal quantities, invalid quantities, zero price quantity, and unsupported unit pairs.</li>
+      <li><code>controllers/recipes.go</code> - use deterministic latest-price ordering and decide how calculation errors should surface or be represented in responses.</li>
+      <li><code>controllers/ingredients.go</code> - use the same deterministic latest-price ordering for <code>latest_price</code>.</li>
+      <li><code>controllers/prices.go</code> - align default price list ordering with deterministic latest-price semantics if useful for the UI.</li>
+      <li><code>controllers/orders.go</code> - change request DTOs for order items so omitted <code>cost_price</code> can be distinguished from explicit zero.</li>
+      <li><code>controllers/workspace_price_test.go</code> - extend coverage for recipe totals under tied price dates and mixed unit conversions.</li>
+      <li><code>controllers/workspace_business_test.go</code> - add coverage for explicit zero <code>cost_price</code> and profit output.</li>
+      <li><code>docs/docs.go</code>, <code>docs/swagger.json</code>, <code>docs/swagger.yaml</code> - regenerate only if request/response annotations or documented model shapes change.</li>
+      <li><code>docs/ai-plans/2026-05-30-backend-calculation-corrections.html</code> - update after implementation with actual changes and checks.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Implementation Steps</h2>
+    <ol>
+      <li>Add table-driven tests that capture the expected calculation contract before editing production code.</li>
+      <li>Introduce a small unit-normalization helper inside <code>utils</code> or the calculation file: trim spaces, lower-case units, map common aliases only if confirmed by existing usage.</li>
+      <li>Implement explicit conversion through base units: grams for mass, milliliters for volume, and unit counts for count-like units.</li>
+      <li>Return errors for zero/negative <code>priceQuantity</code>, invalid recipe quantities, unsupported units, and incompatible dimensions.</li>
+      <li>Update recipe total calculation to use the new helper and keep behavior explicit when an ingredient cannot be calculated.</li>
+      <li>Change latest price ordering in all read paths from <code>date DESC</code> to deterministic ordering.</li>
+      <li>Change order item request structs to use <code>*float64</code> for <code>cost_price</code>, preserving product cost fallback only when the field is omitted.</li>
+      <li>Add controller tests for explicit <code>cost_price: 0</code>, tied price dates, and cross-workspace-safe recipe cost calculations.</li>
+      <li>Run formatting, full tests, vet, and regenerate Swagger if the public request schema changes.</li>
+      <li>Update this plan with completed changes, checks, known limitations, and follow-up recommendations.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>API and Data Impact</h2>
+    <ul>
+      <li>No planned database schema migration.</li>
+      <li><code>cost_price</code> remains the same JSON field, but backend semantics change: omitted means fallback to product cost; explicit <code>0</code> means store zero.</li>
+      <li>Malformed recipe ingredient units may stop producing silent partial totals. The response behavior needs an implementation choice before coding: fail the recipe request, include a calculation warning field, or keep the ingredient cost at zero while logging.</li>
+      <li>Latest price results can change for ingredients with multiple price rows on the same <code>date</code>; this is intended to make the result stable and newest-row-biased.</li>
+      <li>Workspace authorization and scoping should not change.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Test Plan</h2>
+    <ul>
+      <li><code>go test ./utils</code> - focused calculation helper tests.</li>
+      <li><code>go test ./controllers -run "TestGetRecipeCost|TestDashboard|TestOrder|TestWorkspace"</code> - focused controller coverage while iterating.</li>
+      <li><code>go test ./...</code> - full repository test suite.</li>
+      <li><code>go vet ./...</code> - static checks.</li>
+      <li><code>gofmt -w</code> on changed Go files.</li>
+      <li>If Swagger annotations or model shapes change: <code>go run github.com/swaggo/swag/cmd/swag@v1.16.3 init -g main.go</code>.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Manual QA Checklist</h2>
+    <ul>
+      <li>Create or inspect a recipe using a price in <code>kg</code> and recipe quantity in <code>g</code>; verify <code>total_cost</code>.</li>
+      <li>Create or inspect the reverse case, price in <code>g</code> and recipe quantity in <code>kg</code>; verify <code>total_cost</code>.</li>
+      <li>Repeat for <code>l</code>/<code>ml</code>.</li>
+      <li>Add two prices for the same ingredient with the same <code>date</code>; verify the latest created row wins consistently in recipe details and workspace ingredients.</li>
+      <li>Create an order item with omitted <code>cost_price</code>; verify it uses product cost.</li>
+      <li>Create an order item with explicit <code>cost_price: 0</code>; verify dashboard profit treats cost as zero.</li>
+      <li>Confirm workspace selection still isolates prices, recipes, orders, and dashboard totals.</li>
+    </ul>
+  </section>
+
+  <section class="risk">
+    <h2>Risks and Edge Cases</h2>
+    <ul>
+      <li>Existing data may contain unit spellings that are not currently known from backend code.</li>
+      <li>Returning hard errors from recipe reads could break screens that previously rendered with partial totals.</li>
+      <li>Float arithmetic remains approximate; this plan does not move monetary values to integer minor units.</li>
+      <li>Using <code>binding:"required"</code> with numeric zero can reject valid zero values in some Gin validator paths; tests should cover explicit zero where the API permits it.</li>
+      <li>Swagger output may change if request structs move from inline anonymous structs to named DTOs for pointer fields.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Rollback Plan</h2>
+    <p>
+      Revert the calculation and controller changes in the implementation PR. Because this plan avoids schema migrations,
+      rollback should be an application-code rollback only. If deterministic latest-price ordering exposes unexpected business behavior,
+      it can be reverted independently from the unit conversion and order cost fixes.
+    </p>
+  </section>
+
+  <section>
+    <h2>Open Questions</h2>
+    <ul>
+      <li>Which exact unit names should the backend support beyond <code>kg</code>, <code>g</code>, <code>l</code>, and <code>ml</code>?</li>
+      <li>For unsupported unit pairs during recipe reads, should the endpoint fail, omit only that ingredient's calculated cost, or return a warning field?</li>
+      <li>Should prices with identical <code>date</code> prefer newest <code>created_at</code>, highest <code>id</code>, or should same-date duplicates be blocked later?</li>
+      <li>Should money stay as <code>float64</code> for now, or should a later separate plan move monetary fields to integer minor units?</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Implementation Update</h2>
+    <p><strong>Status:</strong> Implemented after approval on 2026-05-30.</p>
+    <ul>
+      <li>Added focused <code>utils.CalculateIngredientCost</code> tests for mass, volume, decimal quantities, count units, invalid quantities, zero price quantity, unknown units, and incompatible dimensions.</li>
+      <li>Expanded conversion coverage across every supported pair: <code>kg/kg</code>, <code>kg/g</code>, <code>g/kg</code>, <code>g/g</code>, <code>l/l</code>, <code>l/ml</code>, <code>ml/l</code>, <code>ml/ml</code>, and <code>pcs/pcs</code>, including case and whitespace normalization.</li>
+      <li>Reworked ingredient cost calculation to normalize supported units, convert through base units, support reverse conversions, and return errors for unsupported or incompatible unit pairs.</li>
+      <li>Added deterministic latest-price ordering with <code>date DESC, created_at DESC, id DESC</code> and applied it to recipe cost lookups, workspace ingredient latest price attachment, and default price list sorting.</li>
+      <li>Added a tied-price-date controller test proving recipe totals use the newest created price row when business dates match.</li>
+      <li>Added a mixed-unit recipe total test proving multiple ingredient costs are summed across mass, volume, and count units.</li>
+      <li>Changed order item request handling so omitted <code>cost_price</code> still falls back to product cost, while explicit <code>cost_price: 0</code> is preserved on create and update.</li>
+      <li>Added controller coverage for omitted order cost fallback, explicit zero cost on create, explicit zero cost on update, and dashboard profit impact.</li>
+      <li>Added dashboard/profit coverage for multiple order item rows, verifying <code>SUM(price * quantity)</code>, <code>SUM(cost_price * quantity)</code>, and <code>profit = revenue - costs</code>.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Checks Run</h2>
+    <ul>
+      <li><code>go test ./utils</code> - passed.</li>
+      <li><code>go test ./controllers -run TestGetRecipeCostUsesNewestPriceWhenDatesTie</code> - failed before ordering fix, passed after implementation.</li>
+      <li><code>go test ./controllers -run TestAddOrderPreservesExplicitZeroCostPrice</code> - failed before pointer-semantics fix, passed after implementation.</li>
+      <li><code>go test ./controllers -run "Test(GetRecipeCostSumsMixedUnitIngredientCosts|DashboardAndProfitCalculateMultipleOrderItems)"</code> - passed.</li>
+      <li><code>go test ./controllers -run "Test(AddOrderPreservesExplicitZeroCostPrice|UpdateOrderPreservesExplicitZeroCostPrice)"</code> - passed.</li>
+      <li><code>go test ./controllers</code> - passed.</li>
+      <li><code>go test ./...</code> - passed.</li>
+      <li><code>go vet ./...</code> - passed.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Known Limitations</h2>
+    <ul>
+      <li>Supported units are intentionally conservative: <code>kg</code>, <code>g</code>, <code>l</code>, <code>ml</code>, and <code>pcs</code>. Other aliases should be added only after confirming frontend/data usage.</li>
+      <li>Recipe read handlers still skip individual ingredient calculation errors instead of surfacing warnings or failing the request. This preserves existing response behavior but can hide malformed historical units.</li>
+      <li>Money fields remain <code>float64</code>; integer minor-unit storage is out of scope for this correction.</li>
+      <li>Swagger was not regenerated because no public field names or route annotations changed.</li>
+    </ul>
+  </section>
+
+  <section class="approval">
+    <h2>Approval Gate</h2>
+    <p>
+      Implementation must not start until this plan is explicitly approved. After approval, production code changes should stay scoped to calculation correctness,
+      deterministic latest-price selection, order cost semantics, tests, and any required Swagger refresh.
+    </p>
+  </section>
+</main>
+</body>
+</html>

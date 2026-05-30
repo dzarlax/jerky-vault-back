@@ -77,7 +77,7 @@ func GetRecipes(c *gin.Context) {
 			// Load latest price for each ingredient
 			var latestPrice models.Price
 			if err := database.DB.Where("ingredient_id = ? AND workspace_id = ?", ri.IngredientID, workspaceID).
-				Order("date DESC").
+				Order(latestPriceOrder).
 				Limit(1).
 				First(&latestPrice).Error; err == nil {
 				recipe.RecipeIngredients[j].Ingredient.Prices = []models.Price{latestPrice} // Assign latest price manually
@@ -129,7 +129,7 @@ func GetRecipe(c *gin.Context) {
 		// Load latest price for each ingredient
 		var latestPrice models.Price
 		if err := database.DB.Where("ingredient_id = ? AND workspace_id = ?", ri.IngredientID, workspaceID).
-			Order("date DESC").
+			Order(latestPriceOrder).
 			Limit(1).
 			First(&latestPrice).Error; err == nil {
 			recipe.RecipeIngredients[j].Ingredient.Prices = []models.Price{latestPrice} // Assign latest price manually
